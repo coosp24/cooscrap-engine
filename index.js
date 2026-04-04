@@ -1,7 +1,8 @@
 import puppeteer from "puppeteer-core";
-import { click, type, wait } from "./util/helpers.js";
+import { click } from "./util/helpers.js";
 import scrapeImages from "./scripts/image-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
+import { login } from "./scripts/form-logger.js";
 
 /* ===================== CONSTANTS ===================== */
 
@@ -33,36 +34,14 @@ async function main() {
   try {
     browser = await launchBrowser();
     page = await browser.newPage();
-
-    const op = 1;
-
     await page.goto(CONFIG.url, { waitUntil: "domcontentloaded" });
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
 
+    const op = 1;
+
     if (op == 1) {
-      await click(
-        page,
-        "#application-wrapper > div.coomeet-chat > div.chat-header > div.signed-in-user > div > div.ui-user-avatar > div",
-      );
-      await click(
-        page,
-        "#application-wrapper > div.coomeet-chat > div.popup-overlay-wrapper > div.popup-overlay.visible > div > div.popup-overlay-content > div > div.ui-scroll-area > div > div.popup-component > div > div > div > form > div.form-content > div.form-content__footer > div > span",
-      );
-
-      await type(page, 'input[type="email"]', "dbpgzgqn@alilot.com");
-      await click(
-        page,
-        "#application-wrapper > div.coomeet-chat > div.popup-overlay-wrapper > div.popup-overlay.visible > div > div.popup-overlay-content > div > div.ui-scroll-area > div > div.popup-component > div > div > div > form > div.form-content > div.form-content__footer > div > span",
-      );
-
-      await type(page, 'input[type="password"]', "demonio");
-
-      await click(
-        page,
-        "#application-wrapper > div.coomeet-chat > div.popup-overlay-wrapper > div.popup-overlay.visible > div > div.popup-overlay-content > div > div.ui-scroll-area > div > div.popup-component > div > div > form > div.form-actions > button",
-      );
-      await wait(1000);
+      await login(page);
       await scrapeStories(page, CONFIG);
     } else {
       await scrapeImages(page, CONFIG);

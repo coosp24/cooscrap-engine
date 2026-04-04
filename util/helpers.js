@@ -9,15 +9,15 @@ export async function click(page, selector, timeout = 3000) {
     await page.waitForSelector(selector, { timeout });
     await page.click(selector);
   } catch {
-    // intentionally silent
+    console.warn(`⚠️ Failed to click: ${selector}`);
   }
 }
 
-export async function type(page, selector, text, timeout = 3000) {
+export async function type(page, selector, text) {
   try {
-    await page.waitForSelector(selector, { timeout });
+    await page.waitForSelector(selector);
     await page.focus(selector);
-    await page.type(selector, text, { delay: 50 });
+    await page.type(selector, text);
   } catch (e) {
     console.warn(`⚠️ Failed to type in: ${selector}`);
   }
