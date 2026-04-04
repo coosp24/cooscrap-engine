@@ -1,7 +1,7 @@
 {
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env scripts/getImages.js"
+    "start": "node --env-file=.env ."
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
