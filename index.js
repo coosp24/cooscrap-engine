@@ -76,7 +76,7 @@ async function main() {
         break;
 
       case "scrape-stories":
-        // await login();
+        await login();
         await scrapeStories();
         break;
 
