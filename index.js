@@ -2,6 +2,8 @@ import puppeteer from "puppeteer-core";
 import { click } from "./util/helpers.js";
 import scrapeImages from "./scripts/image-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
+import downloadImages from "./scripts/image-downloader.js";
+import downloadStories from "./scripts/story-downloader.js";
 import { login } from "./scripts/form-logger.js";
 import addModels from "./scripts/friend-requester.js";
 
@@ -39,14 +41,18 @@ async function main() {
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
 
-    const op = 1;
+    const op = 4;
 
     if (op == 1) {
       await login(page);
-      // await scrapeStories(page, CONFIG);
-      addModels(page, CONFIG);
-    } else {
       await scrapeImages(page, CONFIG);
+    } else if (op == 2) {
+      await login(page);
+      await scrapeStories(page, CONFIG);
+    } else if (op == 3) {
+      await downloadImages();
+    } else if (op == 4) {
+      await downloadStories();
     }
   } catch (error) {
     console.error("❌ Scrape Failed:", error.message);
