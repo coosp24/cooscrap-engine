@@ -1,12 +1,10 @@
 import puppeteer from "puppeteer-core";
 import { click } from "./util/helpers.js";
+import { setContext } from "./util/context.js";
 import scrapeImages from "./scripts/image-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
-import downloadImages from "./scripts/image-downloader.js";
-import downloadStories from "./scripts/story-downloader.js";
-import { login } from "./scripts/form-logger.js";
-import addModels from "./scripts/friend-requester.js";
-import bulkScrape from "./scripts/bulk-script.js";
+import { downloadImages, downloadStories } from "./scripts/media-downloader.js";
+import { login } from "./util/form-logger.js";
 
 /* ===================== CONSTANTS ===================== */
 
@@ -38,6 +36,7 @@ async function main() {
   try {
     browser = await launchBrowser();
     page = await browser.newPage();
+    setContext(page, CONFIG);
     await page.goto(CONFIG.url, { waitUntil: "domcontentloaded" });
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
@@ -45,17 +44,15 @@ async function main() {
     const op = 1;
 
     if (op == 1) {
-      // await login(page);
-      await scrapeImages(page, CONFIG);
+      // await login();
+      await scrapeImages();
     } else if (op == 2) {
-      await login(page);
-      await scrapeStories(page, CONFIG);
+      await login();
+      await scrapeStories();
     } else if (op == 3) {
       await downloadImages();
     } else if (op == 4) {
       await downloadStories();
-    } else if (op == 5) {
-      await bulkScrape(page, CONFIG);
     }
   } catch (error) {
     console.error(error.message);
