@@ -9,7 +9,7 @@ export async function click(page, selector, timeout = 3000) {
     await page.waitForSelector(selector, { timeout });
     await page.click(selector);
   } catch {
-    console.warn(`⚠️ Failed to click: ${selector}`);
+    // console.warn(`⚠️ Failed to click: ${selector}`);
   }
 }
 
@@ -19,7 +19,7 @@ export async function type(page, selector, text) {
     await page.focus(selector);
     await page.type(selector, text);
   } catch (e) {
-    console.warn(`⚠️ Failed to type in: ${selector}`);
+    // console.warn(`⚠️ Failed to type in: ${selector}`);
   }
 }
 

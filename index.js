@@ -3,6 +3,7 @@ import { click } from "./util/helpers.js";
 import scrapeImages from "./scripts/image-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
 import { login } from "./scripts/form-logger.js";
+import addModels from "./scripts/friend-requester.js";
 
 /* ===================== CONSTANTS ===================== */
 
@@ -42,7 +43,8 @@ async function main() {
 
     if (op == 1) {
       await login(page);
-      await scrapeStories(page, CONFIG);
+      // await scrapeStories(page, CONFIG);
+      addModels(page, CONFIG);
     } else {
       await scrapeImages(page, CONFIG);
     }
