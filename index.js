@@ -15,7 +15,7 @@ const CONFIG = {
     "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
   url: "https://p.coomeet.com/dialog",
   timeout: 3000,
-  headless: process.env.HEADLESS === "true",
+  headless: process.env.HEADLESS,
 };
 
 /* ===================== CLI ARGS ===================== */
