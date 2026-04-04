@@ -12,3 +12,9 @@ export async function click(page, selector, timeout = 3000) {
     // intentionally silent
   }
 }
+
+export function printLine() {
+  console.log(
+    "____________________________________________________________________________________",
+  );
+}
