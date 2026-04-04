@@ -6,6 +6,7 @@ import downloadImages from "./scripts/image-downloader.js";
 import downloadStories from "./scripts/story-downloader.js";
 import { login } from "./scripts/form-logger.js";
 import addModels from "./scripts/friend-requester.js";
+import bulkScrape from "./scripts/bulk-script.js";
 
 /* ===================== CONSTANTS ===================== */
 
@@ -41,10 +42,10 @@ async function main() {
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
 
-    const op = 4;
+    const op = 1;
 
     if (op == 1) {
-      await login(page);
+      // await login(page);
       await scrapeImages(page, CONFIG);
     } else if (op == 2) {
       await login(page);
@@ -53,9 +54,11 @@ async function main() {
       await downloadImages();
     } else if (op == 4) {
       await downloadStories();
+    } else if (op == 5) {
+      await bulkScrape(page, CONFIG);
     }
   } catch (error) {
-    console.error("❌ Scrape Failed:", error.message);
+    console.error(error.message);
   } finally {
     // await browser?.close();
   }

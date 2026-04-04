@@ -2,7 +2,9 @@ import supabase from "../util/supabase.js";
 
 export const getStories = async () => {
   const { data, error } = await supabase.from("model_stories").select();
-  console.log(data || error);
+  if (error) {
+    throw new Error(`❌ Failed to fetch model stories: ${error.message}`);
+  }
   return data;
 };
 
