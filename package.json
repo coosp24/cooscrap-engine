@@ -1,7 +1,13 @@
 {
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env ."
+    "scrape:images": "node --env-file=.env . --op=scrape-images",
+    "scrape:stories": "node --env-file=.env . --op=scrape-stories",
+    "scrape:all": "node --env-file=.env . --op=scrape-all",
+    "friend-request": "node --env-file=.env . --op=friend-request",
+    "download:images": "node --env-file=.env . --op=download-images",
+    "download:stories": "node --env-file=.env . --op=download-stories",
+    "download:all": "node --env-file=.env . --op=download-all"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.1",
