@@ -1,27 +1,27 @@
 import supabase from "../util/supabase.js";
 
 export const getImages = async () => {
-  const { data, error } = await supabase.from("model_images").select();
+  const { data, error } = await supabase.from("images").select();
   if (error) {
     throw new Error(`❌ Failed to fetch model images: ${error.message}`);
   }
   return data;
 };
 
-export const insertImage = async (modelId, imageUrl, modelName) => {
+export const insertImage = async (modelId, image) => {
   const { error } = await supabase
-    .from("model_images")
-    .insert({ model_id: modelId, image_url: imageUrl, model_name: modelName })
+    .from("images")
+    .insert({ model_id: modelId, image: image })
     .select()
     .maybeSingle();
 
   if (error) {
     if (error.code === "23505")
-      return `⚠️ Image already exists for model (${modelName}) ${modelId}`;
+      return `⚠️ Image already exists for model: ${modelId}`;
     throw new Error(
-      `❌ Failed to insert image for model ${modelId} (${modelName}): ${error.message}`,
+      `❌ Failed to insert image for model ${modelId}: ${error.message}`,
     );
   }
 
-  return `✅ Inserted image for model: ${modelId} (${modelName})\n${imageUrl}`;
+  return `✅ Inserted image for model: ${modelId}\n${image}`;
 };

@@ -1,7 +1,7 @@
 import puppeteer from "puppeteer-core";
 import { click } from "./util/helpers.js";
 import { setContext } from "./util/context.js";
-import scrapeImages from "./scripts/image-scraper.js";
+import scrapeImages from "./scripts/image-name-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
 import { downloadImages, downloadStories } from "./scripts/media-downloader.js";
 import addModels from "./scripts/friend-requester.js";
@@ -15,7 +15,7 @@ const CONFIG = {
     "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
   url: "https://p.coomeet.com/dialog",
   timeout: 3000,
-  headless: process.env.HEADLESS,
+  headless: false,
 };
 
 /* ===================== CLI ARGS ===================== */
@@ -43,79 +43,31 @@ const BROWSER_OPS = new Set([
 
 async function launchBrowser() {
   return puppeteer.launch({
-    headless: CONFIG.headless,
+    headless: false,
     executablePath: CONFIG.executablePath,
-    args: ["--start-maximized"],
+    args: ["--start-maximized", "--blink-settings=imagesEnabled=false"],
     defaultViewport: null,
   });
 }
 
 async function main() {
-  if (!op) {
-    console.error("Usage: node . --op=<operation>");
-    console.error(
-      "Operations: scrape-images | scrape-stories | scrape-all | friend-request | download-images | download-stories | download-all",
-    );
-    process.exit(1);
-  }
-
   let browser;
   try {
-    if (BROWSER_OPS.has(op)) {
-      browser = await launchBrowser();
-      const page = await browser.newPage();
-      setContext(page, CONFIG);
-      await page.goto(CONFIG.url, { waitUntil: "domcontentloaded" });
-      await click(page, ".gender-item.male");
-      await click(page, ".terms-actions button, .terms-actions div");
-    }
+    browser = await launchBrowser();
+    const page = await browser.newPage();
+    await setContext(page, CONFIG);
+    await page.goto(CONFIG.url, { waitUntil: "domcontentloaded" });
+    await click(page, ".gender-item.male");
+    await click(page, ".terms-actions button, .terms-actions div");
 
-    switch (op) {
-      case "scrape-images":
-        await scrapeImages();
-        break;
-
-      case "scrape-stories":
-        await login();
-        await scrapeStories();
-        break;
-
-      case "scrape-all":
-        await scrapeImages();
-        await login();
-        await scrapeStories();
-        break;
-
-      case "friend-request": {
-        const email = args.email || process.env.EMAIL;
-        const password = args.password || process.env.PASSWORD;
-        await login(email, password);
-        await addModels();
-        break;
-      }
-
-      case "download-images":
-        await downloadImages();
-        break;
-
-      case "download-stories":
-        await downloadStories();
-        break;
-
-      case "download-all":
-        await downloadImages();
-        await downloadStories();
-        break;
-
-      default:
-        console.error(`Unknown op: "${op}"`);
-        process.exit(1);
-    }
+    await login();
+    await scrapeStories();
+    // await scrapeImages();
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
   } finally {
-    await browser?.close();
+    // await browser?.close();
   }
 }
 

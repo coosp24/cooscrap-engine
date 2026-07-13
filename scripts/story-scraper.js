@@ -1,7 +1,7 @@
 import { getModels } from "../api/model.js";
 import { insertStory } from "../api/story.js";
 import { click, printLine } from "../util/helpers.js";
-import { getPage, surf } from "../util/context.js";
+import { getPage, surf, getDataUsageMB } from "../util/context.js";
 
 /* ===================== SELECTORS ===================== */
 
@@ -28,9 +28,9 @@ const selectors = {
     "#application-wrapper > div.coomeet-chat > div.chat-area.dialog-selected > div.right-column > div.messages-list > div.messages-list-header.pointer.visible > div.user-info > div.user-name > div.user-name__text",
 };
 
-/* ===================== SCRAPING LOGIC ===================== */
+/* ===================== SCRAPING ===================== */
 
-async function getModelName() {
+async function getModelName(modelId) {
   const page = getPage();
   for (const selector of [
     selectors.guestModelNameSelector,
@@ -45,12 +45,10 @@ async function getModelName() {
   return null;
 }
 
-async function getVideoSrcFromPopup(modelId, modelName) {
+async function getVideoSrcFromPopup(modelId) {
   const page = getPage();
-  printLine();
-  console.log(`🐦 Scraping story for model: ${modelId} (${modelName})`);
   try {
-    await click(page, selectors.writeButtonSelector, 750);
+    await click(page, selectors.writeButtonSelector, 1500);
     await click(page, selectors.guestStoryAvatarSelector, 750);
     await click(page, selectors.hangedRequestStoryAvatarSelector, 750);
     await click(page, selectors.friendStoryAvatarSelector, 750);
@@ -61,21 +59,38 @@ async function getVideoSrcFromPopup(modelId, modelName) {
   }
 }
 
-export async function scrapeStory(modelId) {
+export async function scrapeStory(modelId, currentStory) {
   try {
-    await surf(modelId);
-    const modelName = await getModelName();
-    const videoSrc = await getVideoSrcFromPopup(modelId, modelName);
-    const res = await insertStory(modelId, videoSrc, modelName);
+    const videoSrc = await getVideoSrcFromPopup(modelId);
+
+    if (videoSrc === currentStory) {
+      console.log(`⚠️  Story unchanged for model: ${modelId}`);
+      return false;
+    }
+
+    const res = await insertStory(modelId, videoSrc);
     console.log(res);
+    return true;
   } catch (error) {
     console.warn(error.message);
+    return false;
   }
 }
 
 export default async function scrape() {
   const models = await getModels();
+  let storiesScraped = 0;
+
   for (const model of models) {
-    await scrapeStory(model.id);
+    printLine();
+    const name = model.name || model.id;
+    console.log(`🎬 Scraping story for model: ${name} (${model.id})`);
+    await surf(model.id);
+    const saved = await scrapeStory(model.id, model.story);
+    if (saved) storiesScraped++;
   }
+
+  printLine();
+  console.log(`🎞️  Stories scraped:  ${storiesScraped}`);
+  console.log(`📡 Data consumed:    ${getDataUsageMB()} MB`);
 }
