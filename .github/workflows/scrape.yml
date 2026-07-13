@@ -13,8 +13,8 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      EMAIL: ${{ secrets.COOMEET_EMAIL }}
-      PASSWORD: ${{ secrets.COOMEET_PASSWORD }}
+      EMAIL: ${{ secrets.EMAIL }}
+      PASSWORD: ${{ secrets.PASSWORD }}
       # ubuntu-latest ships with Google Chrome preinstalled here
       BROWSER_PATH: /usr/bin/google-chrome
       # run the real (non-headless) browser under a virtual display
@@ -36,8 +36,8 @@ jobs:
         env:
           S_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           S_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          S_COOMEET_EMAIL: ${{ secrets.COOMEET_EMAIL }}
-          S_COOMEET_PASSWORD: ${{ secrets.COOMEET_PASSWORD }}
+          S_EMAIL: ${{ secrets.EMAIL }}
+          S_PASSWORD: ${{ secrets.PASSWORD }}
           V_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           V_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: |
@@ -45,8 +45,8 @@ jobs:
           echo "-- repository SECRETS --"
           chk "SUPABASE_URL"      "$S_SUPABASE_URL"
           chk "SUPABASE_ANON_KEY" "$S_SUPABASE_ANON_KEY"
-          chk "COOMEET_EMAIL"     "$S_COOMEET_EMAIL"
-          chk "COOMEET_PASSWORD"  "$S_COOMEET_PASSWORD"
+          chk "EMAIL"             "$S_EMAIL"
+          chk "PASSWORD"          "$S_PASSWORD"
           echo "-- repository VARIABLES (should be EMPTY; only set if you used the wrong tab) --"
           chk "SUPABASE_URL"      "$V_SUPABASE_URL"
           chk "SUPABASE_ANON_KEY" "$V_SUPABASE_ANON_KEY"
