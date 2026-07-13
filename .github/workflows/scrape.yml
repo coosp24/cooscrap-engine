@@ -32,5 +32,24 @@ jobs:
       - name: Install virtual display (Xvfb)
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
+      - name: Check secret/variable presence (diagnostic)
+        env:
+          S_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          S_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          S_COOMEET_EMAIL: ${{ secrets.COOMEET_EMAIL }}
+          S_COOMEET_PASSWORD: ${{ secrets.COOMEET_PASSWORD }}
+          V_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          V_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          chk() { if [ -n "$2" ]; then echo "$1: SET (len ${#2})"; else echo "$1: EMPTY"; fi; }
+          echo "-- repository SECRETS --"
+          chk "SUPABASE_URL"      "$S_SUPABASE_URL"
+          chk "SUPABASE_ANON_KEY" "$S_SUPABASE_ANON_KEY"
+          chk "COOMEET_EMAIL"     "$S_COOMEET_EMAIL"
+          chk "COOMEET_PASSWORD"  "$S_COOMEET_PASSWORD"
+          echo "-- repository VARIABLES (should be EMPTY; only set if you used the wrong tab) --"
+          chk "SUPABASE_URL"      "$V_SUPABASE_URL"
+          chk "SUPABASE_ANON_KEY" "$V_SUPABASE_ANON_KEY"
+
       - name: Run scraper
         run: xvfb-run --auto-servernum node .
