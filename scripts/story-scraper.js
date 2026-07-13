@@ -55,11 +55,6 @@ async function getVideoSrcFromPopup(modelId) {
     await page.waitForSelector(selectors.storySelector, { timeout: 750 });
     return page.$eval(selectors.storySelector, (story) => story.src);
   } catch {
-    // Capture what the browser actually shows when the story UI isn't found,
-    // so CI failures can be diagnosed from the uploaded artifact.
-    try {
-      await page.screenshot({ path: `debug/story-fail-${modelId}.png` });
-    } catch {}
     throw new Error(`❌ Story does not exist for model: ${modelId}`);
   }
 }
