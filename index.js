@@ -15,7 +15,7 @@ const CONFIG = {
     "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
   url: "https://p.coomeet.com/dialog",
   timeout: 3000,
-  headless: false,
+  headless: process.env.HEADLESS === "true",
 };
 
 /* ===================== CLI ARGS ===================== */
@@ -43,9 +43,14 @@ const BROWSER_OPS = new Set([
 
 async function launchBrowser() {
   return puppeteer.launch({
-    headless: false,
+    headless: CONFIG.headless,
     executablePath: CONFIG.executablePath,
-    args: ["--start-maximized", "--blink-settings=imagesEnabled=false"],
+    args: [
+      "--start-maximized",
+      "--blink-settings=imagesEnabled=false",
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+    ],
     defaultViewport: null,
   });
 }
@@ -67,7 +72,7 @@ async function main() {
     console.error(error.message);
     process.exitCode = 1;
   } finally {
-    // await browser?.close();
+    await browser?.close();
   }
 }
 
