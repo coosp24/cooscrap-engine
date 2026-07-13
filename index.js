@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import puppeteer from "puppeteer-core";
 import { click } from "./util/helpers.js";
 import { setContext } from "./util/context.js";
@@ -57,6 +58,7 @@ async function launchBrowser() {
 
 async function main() {
   let browser;
+  fs.mkdirSync("debug", { recursive: true });
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();
@@ -66,6 +68,8 @@ async function main() {
     await click(page, ".terms-actions button, .terms-actions div");
 
     await login();
+    // Snapshot the logged-in state so we can confirm auth worked in CI.
+    await page.screenshot({ path: "debug/after-login.png", fullPage: true });
     await scrapeStories();
     // await scrapeImages();
   } catch (error) {
