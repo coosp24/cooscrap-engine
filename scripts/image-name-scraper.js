@@ -109,4 +109,6 @@ export default async function scrape() {
   console.log(`🏷️  Names scraped:   ${namesScraped}`);
   console.log(`🖼️  Images scraped:  ${imagesScraped}`);
   console.log(`📡 Data consumed:   ${getDataUsageMB()} MB`);
+  // Images are the run's content count (names ride along in the same visit).
+  return imagesScraped;
 }

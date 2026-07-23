@@ -92,4 +92,5 @@ export default async function scrape() {
   printLine();
   console.log(`🎞️  Stories scraped:  ${storiesScraped}`);
   console.log(`📡 Data consumed:    ${getDataUsageMB()} MB`);
+  return storiesScraped;
 }

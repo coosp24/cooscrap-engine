@@ -4,6 +4,7 @@ import { setContext } from "./util/context.js";
 import scrapeImages from "./scripts/image-name-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
 import { downloadImages, downloadStories } from "./scripts/media-downloader.js";
+import { insertScrapeLog } from "./api/scrape-log.js";
 import { login } from "./util/form-logger.js";
 
 /* ===================== CONSTANTS ===================== */
@@ -48,6 +49,12 @@ const BROWSER_OPS = new Set(["scrape-images", "scrape-stories"]);
 // to the friend UI and the scrape fails, so it must never log in.
 const LOGIN_OPS = new Set(["scrape-stories"]);
 
+// Scrape ops record a scrape_logs row when they finish (download ops don't).
+const SCRAPE_LOG_TYPES = {
+  "scrape-stories": "story",
+  "scrape-images": "image",
+};
+
 /* ===================== MAIN ===================== */
 
 async function launchBrowser() {
@@ -85,6 +92,7 @@ async function main() {
   }
 
   let browser;
+  const startedAt = new Date();
   try {
     browser = await launchBrowser();
     const page = await browser.newPage();
@@ -94,7 +102,17 @@ async function main() {
     await click(page, ".terms-actions button, .terms-actions div");
 
     if (LOGIN_OPS.has(op)) await login();
-    await run();
+    const scraped = await run();
+
+    const type = SCRAPE_LOG_TYPES[op];
+    if (type) {
+      await insertScrapeLog({
+        type,
+        startedAt,
+        finishedAt: new Date(),
+        scraped: scraped ?? 0,
+      });
+    }
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
