@@ -78,10 +78,12 @@ export default async function scrape() {
   const models = await getModels();
   let storiesScraped = 0;
 
-  for (const model of models) {
+  for (const [index, model] of models.entries()) {
     printLine();
     const name = model.name || model.id;
-    console.log(`🎬 Scraping story for model: ${name} (${model.id})`);
+    console.log(
+      `🎬 Scraping story for model: ${name} (${model.id}) (${index + 1}/${models.length})`,
+    );
     await surf(model.id);
     const saved = await scrapeStory(model.id);
     if (saved) storiesScraped++;
