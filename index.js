@@ -35,21 +35,18 @@ const op = args.op || "scrape-stories";
 const OPS = {
   "scrape-stories": () => scrapeStories(),
   "scrape-images": () => scrapeImages(),
-  "scrape-all": async () => {
-    await scrapeStories();
-    await scrapeImages();
-  },
   "download-images": () => downloadImages(),
   "download-stories": () => downloadStories(),
 };
 
 // Ops that drive the site through the browser; the download ops only talk to
 // the DB/CDN and skip the whole browser setup.
-const BROWSER_OPS = new Set([
-  "scrape-images",
-  "scrape-stories",
-  "scrape-all",
-]);
+const BROWSER_OPS = new Set(["scrape-images", "scrape-stories"]);
+
+// Ops that require being logged in. Image/name scraping reads the guest
+// invite form, which only renders logged OUT — logging in swaps every model
+// to the friend UI and the scrape fails, so it must never log in.
+const LOGIN_OPS = new Set(["scrape-stories"]);
 
 /* ===================== MAIN ===================== */
 
@@ -96,7 +93,7 @@ async function main() {
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
 
-    await login();
+    if (LOGIN_OPS.has(op)) await login();
     await run();
   } catch (error) {
     console.error(error.message);

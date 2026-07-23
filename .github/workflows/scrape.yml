@@ -15,7 +15,6 @@ on:
         options:
           - scrape-stories
           - scrape-images
-          - scrape-all
 
 jobs:
   scrape:

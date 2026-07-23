@@ -6,54 +6,36 @@ import { getPage, surf, getDataUsageMB } from "../util/context.js";
 
 /* ===================== SELECTORS ===================== */
 
+// This scraper runs logged OUT (see LOGIN_OPS in index.js), so every model
+// renders the guest invite form — the only UI these selectors target.
 const selectors = {
   avatarSelector: ".send-invite-form__avatar .ui-user-avatar__story-button",
-
-  hangedRequestAvatarSelector:
-    ".invite-request-form__avatar .ui-user-avatar__story-button",
-
-  friendAvatarSelector:
-    "#application-wrapper > div.coomeet-chat > div.chat-area.dialog-selected > div.right-column > div.messages-list > div.messages-list-header.pointer.visible > div.ui-user-avatar.stroked > div.ui-user-avatar__story-button > div.ui-user-avatar__story-button--bg",
 
   imageSelector: ".photo-viewer__image img",
 
   modelNameSelector: ".send-invite-form__username",
-
-  declinedRequestNameSelector:
-    "#application-wrapper > div.coomeet-chat > div.chat-area.dialog-selected > div.right-column > div.messages-list > div.invite-form > div > div.invite-request-form > div.invite-request-form__username",
-
-  friendModelNameSelector:
-    "#application-wrapper > div.coomeet-chat > div.chat-area.dialog-selected > div.right-column > div.messages-list > div.messages-list-header.pointer.visible > div.user-info > div.user-name > div.user-name__text",
 };
 
 /* ===================== SCRAPING ===================== */
 
-// The name element differs per relationship state (guest invite form, friend
-// chat header, declined request), so try each with a short timeout — the old
-// guest-only wait had no timeout and stalled 30s on every non-guest model.
 async function getModelName() {
   const page = getPage();
-  for (const selector of [
-    selectors.modelNameSelector,
-    selectors.friendModelNameSelector,
-    selectors.declinedRequestNameSelector,
-  ]) {
-    try {
-      await page.waitForSelector(selector, { timeout: 2000 });
-      return await page.$eval(selector, (el) => el.textContent.trim());
-    } catch {}
+  try {
+    // Short timeout: the default (30s) stalled the whole run on any model
+    // whose invite form doesn't render.
+    await page.waitForSelector(selectors.modelNameSelector, { timeout: 2000 });
+    return await page.$eval(selectors.modelNameSelector, (el) =>
+      el.textContent.trim(),
+    );
+  } catch {
+    return null;
   }
-  return null;
 }
 
 async function getImageSrcFromPopup(modelId) {
   const page = getPage();
   try {
-    // Same avatar-variant sweep as the story scraper: clicks on selectors
-    // that aren't present are silently skipped.
     await click(page, selectors.avatarSelector, 500);
-    await click(page, selectors.hangedRequestAvatarSelector, 500);
-    await click(page, selectors.friendAvatarSelector, 500);
     await page.waitForSelector(selectors.imageSelector, { timeout: 750 });
 
     return page.$eval(selectors.imageSelector, (img) => img.src);

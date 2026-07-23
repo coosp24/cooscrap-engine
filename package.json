@@ -3,12 +3,8 @@
   "scripts": {
     "scrape:images": "node --env-file=.env . --op=scrape-images",
     "scrape:stories": "node --env-file=.env . --op=scrape-stories",
-    "scrape:all": "node --env-file=.env . --op=scrape-all",
-    "friend-request": "node --env-file=.env . --op=friend-request",
     "download:images": "node --env-file=.env . --op=download-images",
     "download:stories": "node --env-file=.env . --op=download-stories",
-    "download:all": "node --env-file=.env . --op=download-all",
-    "prod:scrape:all": "node . --op=scrape-all",
     "dev": "node --env-file=.env index.js"
   },
   "dependencies": {
