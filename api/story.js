@@ -16,12 +16,20 @@ export const insertStory = async (modelId, storyUrl) => {
     .maybeSingle();
 
   if (error) {
+    // Duplicate key: the story is already in the table — not a new scrape,
+    // so callers must not count it.
     if (error.code === "23505")
-      return `⚠️ Story already exists for model: ${modelId}`;
+      return {
+        inserted: false,
+        message: `⚠️ Story already exists for model: ${modelId}`,
+      };
     throw new Error(
       `❌ Failed to insert story for model ${modelId}: ${error.message}`,
     );
   }
 
-  return `✅ Inserted story for model: ${modelId}\n${storyUrl}`;
+  return {
+    inserted: true,
+    message: `✅ Inserted story for model: ${modelId}\n${storyUrl}`,
+  };
 };

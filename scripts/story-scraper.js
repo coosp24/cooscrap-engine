@@ -59,18 +59,15 @@ async function getVideoSrcFromPopup(modelId) {
   }
 }
 
-export async function scrapeStory(modelId, currentStory) {
+export async function scrapeStory(modelId) {
   try {
     const videoSrc = await getVideoSrcFromPopup(modelId);
 
-    if (videoSrc === currentStory) {
-      console.log(`⚠️  Story unchanged for model: ${modelId}`);
-      return false;
-    }
-
+    // Dedupe is handled by the DB (story URL is unique): a duplicate insert
+    // reports inserted=false, so only genuinely new stories are counted.
     const res = await insertStory(modelId, videoSrc);
-    console.log(res);
-    return true;
+    console.log(res.message);
+    return res.inserted;
   } catch (error) {
     console.warn(error.message);
     return false;
@@ -86,7 +83,7 @@ export default async function scrape() {
     const name = model.name || model.id;
     console.log(`🎬 Scraping story for model: ${name} (${model.id})`);
     await surf(model.id);
-    const saved = await scrapeStory(model.id, model.story);
+    const saved = await scrapeStory(model.id);
     if (saved) storiesScraped++;
   }
 

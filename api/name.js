@@ -16,12 +16,20 @@ export const insertName = async (modelId, name) => {
     .maybeSingle();
 
   if (error) {
+    // Duplicate key: the name is already in the table — not a new scrape,
+    // so callers must not count it.
     if (error.code === "23505")
-      return `⚠️ Name already exists for model (${name}) ${modelId}`;
+      return {
+        inserted: false,
+        message: `⚠️ Name already exists for model (${name}) ${modelId}`,
+      };
     throw new Error(
       `❌ Failed to insert name for model ${modelId} (${name}): ${error.message}`,
     );
   }
 
-  return `✅ Inserted name for model: ${modelId} (${name})`;
+  return {
+    inserted: true,
+    message: `✅ Inserted name for model: ${modelId} (${name})`,
+  };
 };

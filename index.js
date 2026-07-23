@@ -4,7 +4,6 @@ import { setContext } from "./util/context.js";
 import scrapeImages from "./scripts/image-name-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
 import { downloadImages, downloadStories } from "./scripts/media-downloader.js";
-import addModels from "./scripts/friend-requester.js";
 import { login } from "./util/form-logger.js";
 
 /* ===================== CONSTANTS ===================== */
@@ -30,13 +29,26 @@ const args = Object.fromEntries(
     }),
 );
 
-const op = args.op;
+const op = args.op || "scrape-stories";
 
+// What each op runs. scrape-images also scrapes names (same popup visit).
+const OPS = {
+  "scrape-stories": () => scrapeStories(),
+  "scrape-images": () => scrapeImages(),
+  "scrape-all": async () => {
+    await scrapeStories();
+    await scrapeImages();
+  },
+  "download-images": () => downloadImages(),
+  "download-stories": () => downloadStories(),
+};
+
+// Ops that drive the site through the browser; the download ops only talk to
+// the DB/CDN and skip the whole browser setup.
 const BROWSER_OPS = new Set([
   "scrape-images",
   "scrape-stories",
   "scrape-all",
-  "friend-request",
 ]);
 
 /* ===================== MAIN ===================== */
@@ -56,6 +68,25 @@ async function launchBrowser() {
 }
 
 async function main() {
+  const run = OPS[op];
+  if (!run) {
+    console.error(
+      `❌ Unknown op "${op}". Valid ops: ${Object.keys(OPS).join(", ")}`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!BROWSER_OPS.has(op)) {
+    try {
+      await run();
+    } catch (error) {
+      console.error(error.message);
+      process.exitCode = 1;
+    }
+    return;
+  }
+
   let browser;
   try {
     browser = await launchBrowser();
@@ -66,8 +97,7 @@ async function main() {
     await click(page, ".terms-actions button, .terms-actions div");
 
     await login();
-    await scrapeStories();
-    // await scrapeImages();
+    await run();
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

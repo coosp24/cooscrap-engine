@@ -39,10 +39,12 @@ export async function scrapeName(modelId, currentName) {
       return { name, scraped: false };
     }
 
+    // A duplicate insert (name already in the history) reports
+    // inserted=false, so only genuinely new names are counted.
     const res = await insertName(modelId, name);
     await updateModelName(modelId, name);
-    console.log(res);
-    return { name, scraped: true };
+    console.log(res.message);
+    return { name, scraped: res.inserted };
   } catch (error) {
     console.warn(error.message);
     return { name: null, scraped: false };
@@ -58,10 +60,11 @@ export async function scrapeImage(modelId, currentImage) {
       return false;
     }
 
+    // Same dedupe rule as names: count only genuinely new images.
     const res = await insertImage(modelId, imgSrc);
     await updateModelImage(modelId, imgSrc);
-    console.log(res);
-    return true;
+    console.log(res.message);
+    return res.inserted;
   } catch (error) {
     console.warn(error.message);
     return false;

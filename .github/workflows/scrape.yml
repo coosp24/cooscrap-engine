@@ -1,10 +1,21 @@
-name: Scrape stories
+name: Scrape
 
 on:
   schedule:
-    # Runs twice a day at 06:00 and 18:00 UTC. Adjust to your timezone.
-    - cron: "0 6,18 * * *"
-  workflow_dispatch: {} # allow manual runs from the Actions tab
+    # Stories (videos): four times a day, every 6 hours (UTC).
+    - cron: "0 0,6,12,18 * * *"
+    # Images + names: once a day, offset so it never overlaps a story run.
+    - cron: "0 3 * * *"
+  workflow_dispatch: # allow manual runs from the Actions tab
+    inputs:
+      op:
+        description: Operation to run
+        type: choice
+        default: scrape-stories
+        options:
+          - scrape-stories
+          - scrape-images
+          - scrape-all
 
 jobs:
   scrape:
@@ -19,6 +30,10 @@ jobs:
       BROWSER_PATH: /usr/bin/google-chrome
       # run the real (non-headless) browser under a virtual display
       HEADLESS: "false"
+      # github.event.schedule is the cron expression that fired, so the daily
+      # 03:00 schedule runs the images+names scrape and every other schedule
+      # (or a manual run without an explicit choice) scrapes stories.
+      OP: ${{ github.event_name == 'workflow_dispatch' && inputs.op || (github.event.schedule == '0 3 * * *' && 'scrape-images' || 'scrape-stories') }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,5 +47,5 @@ jobs:
       - name: Install virtual display (Xvfb)
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
-      - name: Run scraper
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node .
+      - name: Run scraper (${{ env.OP }})
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node . --op=$OP

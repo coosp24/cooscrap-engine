@@ -16,12 +16,20 @@ export const insertImage = async (modelId, image) => {
     .maybeSingle();
 
   if (error) {
+    // Duplicate key: the image is already in the table — not a new scrape,
+    // so callers must not count it.
     if (error.code === "23505")
-      return `⚠️ Image already exists for model: ${modelId}`;
+      return {
+        inserted: false,
+        message: `⚠️ Image already exists for model: ${modelId}`,
+      };
     throw new Error(
       `❌ Failed to insert image for model ${modelId}: ${error.message}`,
     );
   }
 
-  return `✅ Inserted image for model: ${modelId}\n${image}`;
+  return {
+    inserted: true,
+    message: `✅ Inserted image for model: ${modelId}\n${image}`,
+  };
 };
