@@ -57,18 +57,34 @@ const SCRAPE_LOG_TYPES = {
 
 /* ===================== MAIN ===================== */
 
-async function launchBrowser() {
-  return puppeteer.launch({
-    headless: CONFIG.headless,
-    executablePath: CONFIG.executablePath,
-    args: [
-      "--start-maximized",
-      "--blink-settings=imagesEnabled=false",
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-    ],
-    defaultViewport: null,
-  });
+async function launchBrowser(attempts = 2) {
+  try {
+    return await puppeteer.launch({
+      headless: CONFIG.headless,
+      executablePath: CONFIG.executablePath,
+      // CI runners can be slow to bring Chrome up; the 30s default has
+      // timed out on GitHub Actions.
+      timeout: 120_000,
+      // On CI, stream Chrome's own stdout/stderr into the job log so a
+      // crashing launch says why instead of just timing out.
+      dumpio: process.env.CI === "true",
+      args: [
+        "--start-maximized",
+        "--blink-settings=imagesEnabled=false",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        // /dev/shm can be too small on CI, crashing Chrome at startup.
+        "--disable-dev-shm-usage",
+      ],
+      defaultViewport: null,
+    });
+  } catch (error) {
+    if (attempts > 1) {
+      console.warn(`⚠️ Browser launch failed (${error.message}) — retrying…`);
+      return launchBrowser(attempts - 1);
+    }
+    throw error;
+  }
 }
 
 async function main() {
