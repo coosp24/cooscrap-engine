@@ -5,6 +5,7 @@ import scrapeImages from "./scripts/image-name-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
 import { downloadImages, downloadStories } from "./scripts/media-downloader.js";
 import { insertScrapeLog } from "./api/scrape-log.js";
+import { getPrimaryAccount } from "./api/account.js";
 import { login } from "./util/form-logger.js";
 
 /* ===================== CONSTANTS ===================== */
@@ -117,7 +118,11 @@ async function main() {
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
 
-    if (LOGIN_OPS.has(op)) await login();
+    if (LOGIN_OPS.has(op)) {
+      const account = await getPrimaryAccount();
+      console.log(`🔑 Logging in as ${account.email}`);
+      await login(account.email, account.password);
+    }
     const scraped = await run();
 
     const type = SCRAPE_LOG_TYPES[op];

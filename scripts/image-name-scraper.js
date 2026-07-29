@@ -16,6 +16,14 @@ const selectors = {
   modelNameSelector: ".send-invite-form__username",
 };
 
+// What the site shows instead of a name once a model's account is gone. Those
+// models are renamed by hand in the dashboard, so this is never recorded — see
+// scrapeName.
+const DELETED_ACCOUNT_NAME = "account deleted";
+
+const isDeletedAccount = (name) =>
+  name.trim().toLowerCase() === DELETED_ACCOUNT_NAME;
+
 /* ===================== SCRAPING ===================== */
 
 async function getModelName() {
@@ -49,6 +57,13 @@ export async function scrapeName(modelId, currentName) {
     const name = await getModelName();
     if (!name) {
       throw new Error(`❌ Name not found for model: ${modelId}`);
+    }
+
+    // A deleted account has no real name to scrape, and writing the placeholder
+    // would wipe the name the dashboard put there by hand.
+    if (isDeletedAccount(name)) {
+      console.log(`⚠️  Account deleted — keeping name for model: ${modelId}`);
+      return { name: currentName, scraped: false };
     }
 
     if (name === currentName) {

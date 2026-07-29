@@ -23,8 +23,10 @@ jobs:
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      EMAIL: ${{ secrets.EMAIL }}
-      PASSWORD: ${{ secrets.PASSWORD }}
+      # Login credentials come from the account marked primary in the dashboard,
+      # and `accounts` is admin-only under RLS — reading it needs the service
+      # role key. Story runs (the ones that log in) fail without this secret.
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       # ubuntu-latest ships with Google Chrome preinstalled here
       BROWSER_PATH: /usr/bin/google-chrome
       # run the real (non-headless) browser under a virtual display
