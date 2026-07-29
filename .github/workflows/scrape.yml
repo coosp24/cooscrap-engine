@@ -16,6 +16,14 @@ on:
           - scrape-stories
           - scrape-images
 
+# Only one scrape at a time. Runs can now be started by hand from the dashboard
+# as well as by cron, and two browsers driving the site with the same primary
+# account at once is asking for trouble — a second run waits for the first
+# instead of racing it.
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
