@@ -1,7 +1,12 @@
 import { getModels } from "../api/model.js";
 import { insertStory } from "../api/story.js";
 import { printLine, wait } from "../util/helpers.js";
-import { getPage, surf, getDataUsageMB } from "../util/context.js";
+import {
+  getPage,
+  surf,
+  navigateInApp,
+  getDataUsageMB,
+} from "../util/context.js";
 
 /* ===================== SELECTORS ===================== */
 
@@ -26,6 +31,8 @@ const selectors = {
     ".ui-user-avatar__story-button--bg",
     ".ui-user-avatar__story-button",
   ],
+
+  storyViewerSelector: ".story-viewer",
 
   storySelector: ".story-viewer__video video",
 
@@ -68,10 +75,15 @@ const MODEL_AVATAR_SELECTOR = [
 ].join(", ");
 
 // Generous on purpose: these waits end as soon as the element shows up (the
-// avatar renders ~1.2s after navigation, the video ~150ms after the click),
-// so they only run to the limit when a page is genuinely slow or broken.
+// avatar renders ~150ms after in-app navigation, ~1.2s after a reload, and the
+// video ~150ms after the click), so they only run to the limit when a page is
+// genuinely slow or broken.
 const PAGE_READY_TIMEOUT = 10000;
 const VIDEO_TIMEOUT = 10000;
+
+// How long the previous model gets to leave the screen before we give up on
+// in-app navigation and reload the page instead.
+const CLEAR_TIMEOUT = 3000;
 
 // A model that does have a story was, rarely, first seen without its ring
 // (~1 in 125 visits in testing), so a missing ring is checked once more after
@@ -112,14 +124,58 @@ async function getStoryButton(modelId) {
   return null;
 }
 
+async function findStoryButton(modelId) {
+  const storyButton = await getStoryButton(modelId);
+  if (storyButton) return storyButton;
+  await wait(NO_STORY_RECHECK_DELAY);
+  return getStoryButton(modelId);
+}
+
+// Opens a model's dialog without reloading: first back to the empty /dialog
+// screen (Escape closes the story viewer left open by the last model), and
+// only once the last model's avatar and viewer are gone, on to this one — so
+// nothing read afterwards can be a leftover from the model before.
+// Returns false if the screen didn't clear.
+async function openDialogInApp(modelId) {
+  const page = getPage();
+  await page.keyboard.press("Escape");
+  await navigateInApp("/dialog");
+  try {
+    await page.waitForFunction(
+      (avatarSel, viewerSel) =>
+        !document.querySelector(viewerSel) &&
+        ![...document.querySelectorAll(avatarSel)].some(
+          (el) => el.getBoundingClientRect().width > 0,
+        ),
+      { timeout: CLEAR_TIMEOUT },
+      MODEL_AVATAR_SELECTOR,
+      selectors.storyViewerSelector,
+    );
+  } catch {
+    return false;
+  }
+  await navigateInApp(`/dialog/${modelId}`);
+  return true;
+}
+
+// In-app navigation is the fast path; a full reload is the fallback whenever
+// it doesn't work out, so a change on the site slows the run down rather than
+// losing stories.
+async function openStoryButton(modelId) {
+  if (await openDialogInApp(modelId)) {
+    try {
+      return await findStoryButton(modelId);
+    } catch {}
+  }
+  console.warn(`↻ In-app navigation failed — reloading for model: ${modelId}`);
+  await surf(modelId);
+  return findStoryButton(modelId);
+}
+
 async function getVideoSrcFromPopup(modelId) {
   const page = getPage();
 
-  let storyButton = await getStoryButton(modelId);
-  if (!storyButton) {
-    await wait(NO_STORY_RECHECK_DELAY);
-    storyButton = await getStoryButton(modelId);
-  }
+  const storyButton = await openStoryButton(modelId);
   if (!storyButton) {
     throw new Error(`❌ Story does not exist for model: ${modelId}`);
   }
@@ -164,7 +220,6 @@ export default async function scrape() {
     console.log(
       `🎬 Scraping story for model: ${name} (${model.id}) (${index + 1}/${models.length})`,
     );
-    await surf(model.id);
     const saved = await scrapeStory(model.id);
     if (saved) storiesScraped++;
   }

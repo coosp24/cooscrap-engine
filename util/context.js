@@ -51,6 +51,16 @@ export function getPage() {
   return _page;
 }
 
+// Moves the already-loaded app to another of its pages through its own router,
+// the way clicking a dialog in the sidebar does — no reload, so it takes
+// ~150ms instead of the ~1.2s a full `surf` spends restarting the app.
+export async function navigateInApp(path) {
+  await _page.evaluate((path) => {
+    history.pushState({}, "", path);
+    dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+  }, path);
+}
+
 export async function surf(modelId) {
   await _page.goto(`${_config.url}/${modelId}`, {
     waitUntil: "domcontentloaded",
