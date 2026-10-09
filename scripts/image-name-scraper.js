@@ -1,17 +1,22 @@
 import { getModels, updateModelName, updateModelImage } from "../api/model.js";
 import { insertImage } from "../api/image.js";
 import { insertName } from "../api/name.js";
-import { click, printLine } from "../util/helpers.js";
-import { getPage, surf, getDataUsageMB } from "../util/context.js";
+import { printLine, wait } from "../util/helpers.js";
+import {
+  getPage,
+  surf,
+  openDialogInApp,
+  getDataUsageMB,
+} from "../util/context.js";
 
 /* ===================== SELECTORS ===================== */
 
 // This scraper runs logged OUT (see LOGIN_OPS in index.js), so every model
 // renders the guest invite form — the only UI these selectors target.
 const selectors = {
-  avatarSelector: ".send-invite-form__avatar .ui-user-avatar__story-button",
+  avatarSelector: ".send-invite-form__avatar .ui-user-avatar",
 
-  imageSelector: ".photo-viewer__image img",
+  avatarImageSelector: ".ui-user-avatar__image",
 
   modelNameSelector: ".send-invite-form__username",
 };
@@ -26,35 +31,69 @@ const isDeletedAccount = (name) =>
 
 /* ===================== SCRAPING ===================== */
 
-async function getModelName() {
+// Generous on purpose: the wait ends as soon as the form renders (~150ms after
+// in-app navigation, ~1s after a reload), so it only runs to the limit when a
+// page is slow or broken.
+const PAGE_READY_TIMEOUT = 10000;
+
+// The image wasn't seen to arrive after the avatar in testing, but a missing
+// one is checked once more after this short pause, as the story scraper does.
+const NO_IMAGE_RECHECK_DELAY = 300;
+
+// Reads the name and image straight off the invite form. The avatar's
+// background-image is the same URL the photo viewer opens (it matched in every
+// model tested), so there's no popup to click and wait for. A model without an
+// image renders the avatar with no background at all, so that's known at once
+// instead of after a timeout.
+async function readProfile(modelId) {
   const page = getPage();
   try {
-    // Short timeout: the default (30s) stalled the whole run on any model
-    // whose invite form doesn't render.
-    await page.waitForSelector(selectors.modelNameSelector, { timeout: 2000 });
-    return await page.$eval(selectors.modelNameSelector, (el) =>
-      el.textContent.trim(),
+    const profile = await page.waitForFunction(
+      (sel) => {
+        const avatar = document.querySelector(sel.avatarSelector);
+        const name = document.querySelector(sel.modelNameSelector);
+        if (!avatar?.getBoundingClientRect().width || !name) return null;
+
+        const bg = avatar.querySelector(sel.avatarImageSelector)?.style
+          .backgroundImage;
+        return {
+          name: name.textContent.trim() || null,
+          image: bg?.match(/url\("?(.*?)"?\)/)?.[1] || null,
+        };
+      },
+      { timeout: PAGE_READY_TIMEOUT },
+      selectors,
     );
+    return await profile.jsonValue();
   } catch {
-    return null;
+    throw new Error(`❌ Model page did not load for model: ${modelId}`);
   }
 }
 
-async function getImageSrcFromPopup(modelId) {
-  const page = getPage();
-  try {
-    await click(page, selectors.avatarSelector, 500);
-    await page.waitForSelector(selectors.imageSelector, { timeout: 750 });
-
-    return page.$eval(selectors.imageSelector, (img) => img.src);
-  } catch {
-    throw new Error(`❌ Image does not exist for model: ${modelId}`);
-  }
+async function findProfile(modelId) {
+  const profile = await readProfile(modelId);
+  if (profile.image) return profile;
+  await wait(NO_IMAGE_RECHECK_DELAY);
+  return readProfile(modelId);
 }
 
-export async function scrapeName(modelId, currentName) {
+// In-app navigation is the fast path; a full reload is the fallback whenever
+// it doesn't work out, so a change on the site slows the run down rather than
+// losing names and images.
+async function getProfile(modelId) {
+  const leftovers = `${selectors.avatarSelector}, ${selectors.modelNameSelector}`;
+  if (await openDialogInApp(modelId, leftovers)) {
+    try {
+      return await findProfile(modelId);
+    } catch {}
+  }
+  console.warn(`↻ In-app navigation failed — reloading for model: ${modelId}`);
+  await surf(modelId);
+  return findProfile(modelId);
+}
+
+export async function scrapeName(modelId, name, currentName) {
   try {
-    const name = await getModelName();
     if (!name) {
       throw new Error(`❌ Name not found for model: ${modelId}`);
     }
@@ -83,9 +122,11 @@ export async function scrapeName(modelId, currentName) {
   }
 }
 
-export async function scrapeImage(modelId, currentImage) {
+export async function scrapeImage(modelId, imgSrc, currentImage) {
   try {
-    const imgSrc = await getImageSrcFromPopup(modelId);
+    if (!imgSrc) {
+      throw new Error(`❌ Image does not exist for model: ${modelId}`);
+    }
 
     if (imgSrc === currentImage) {
       console.log(`⚠️  Image unchanged for model: ${modelId}`);
@@ -113,9 +154,20 @@ export default async function scrape() {
     console.log(
       `🦅 Scraping model: ${model.id} (${index + 1}/${models.length})`,
     );
-    await surf(model.id);
-    const { scraped: nameSaved } = await scrapeName(model.id, model.name);
-    const imageSaved = await scrapeImage(model.id, model.image);
+    let profile;
+    try {
+      profile = await getProfile(model.id);
+    } catch (error) {
+      console.warn(error.message);
+      continue;
+    }
+
+    const { scraped: nameSaved } = await scrapeName(
+      model.id,
+      profile.name,
+      model.name,
+    );
+    const imageSaved = await scrapeImage(model.id, profile.image, model.image);
     if (nameSaved) namesScraped++;
     if (imageSaved) imagesScraped++;
   }

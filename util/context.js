@@ -1,5 +1,9 @@
 const BLOCKED_TYPES = new Set(["image", "media", "font"]);
 
+// How long the previous model gets to leave the screen before in-app
+// navigation is given up on in favour of a reload.
+const CLEAR_TIMEOUT = 3000;
+
 let _page = null;
 let _config = null;
 let _dataBytes = 0;
@@ -49,6 +53,40 @@ export function getDataUsageMB() {
 
 export function getPage() {
   return _page;
+}
+
+// Moves the already-loaded app to another of its pages through its own router,
+// the way clicking a dialog in the sidebar does — no reload, so it takes
+// ~150ms instead of the ~1.2s a full `surf` spends restarting the app.
+async function navigateInApp(path) {
+  await _page.evaluate((path) => {
+    history.pushState({}, "", path);
+    dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+  }, path);
+}
+
+// Opens a model's dialog in-app: first back to the empty /dialog screen
+// (Escape closes any viewer the last model left open), and only once nothing
+// matching `leftoverSelector` is on screen any more, on to the model — so
+// nothing read afterwards can be a leftover from the model before. Returns
+// false if the screen didn't clear in time, so the caller can `surf` instead.
+export async function openDialogInApp(modelId, leftoverSelector) {
+  await _page.keyboard.press("Escape");
+  await navigateInApp("/dialog");
+  try {
+    await _page.waitForFunction(
+      (sel) =>
+        ![...document.querySelectorAll(sel)].some(
+          (el) => el.getBoundingClientRect().width > 0,
+        ),
+      { timeout: CLEAR_TIMEOUT },
+      leftoverSelector,
+    );
+  } catch {
+    return false;
+  }
+  await navigateInApp(`/dialog/${modelId}`);
+  return true;
 }
 
 export async function surf(modelId) {
