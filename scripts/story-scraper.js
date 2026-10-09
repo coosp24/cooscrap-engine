@@ -4,7 +4,7 @@ import { printLine, wait } from "../util/helpers.js";
 import {
   getPage,
   surf,
-  navigateInApp,
+  openDialogInApp,
   getDataUsageMB,
 } from "../util/context.js";
 
@@ -81,10 +81,6 @@ const MODEL_AVATAR_SELECTOR = [
 const PAGE_READY_TIMEOUT = 10000;
 const VIDEO_TIMEOUT = 10000;
 
-// How long the previous model gets to leave the screen before we give up on
-// in-app navigation and reload the page instead.
-const CLEAR_TIMEOUT = 3000;
-
 // A model that does have a story was, rarely, first seen without its ring
 // (~1 in 125 visits in testing), so a missing ring is checked once more after
 // this short pause before giving up.
@@ -131,38 +127,12 @@ async function findStoryButton(modelId) {
   return getStoryButton(modelId);
 }
 
-// Opens a model's dialog without reloading: first back to the empty /dialog
-// screen (Escape closes the story viewer left open by the last model), and
-// only once the last model's avatar and viewer are gone, on to this one — so
-// nothing read afterwards can be a leftover from the model before.
-// Returns false if the screen didn't clear.
-async function openDialogInApp(modelId) {
-  const page = getPage();
-  await page.keyboard.press("Escape");
-  await navigateInApp("/dialog");
-  try {
-    await page.waitForFunction(
-      (avatarSel, viewerSel) =>
-        !document.querySelector(viewerSel) &&
-        ![...document.querySelectorAll(avatarSel)].some(
-          (el) => el.getBoundingClientRect().width > 0,
-        ),
-      { timeout: CLEAR_TIMEOUT },
-      MODEL_AVATAR_SELECTOR,
-      selectors.storyViewerSelector,
-    );
-  } catch {
-    return false;
-  }
-  await navigateInApp(`/dialog/${modelId}`);
-  return true;
-}
-
 // In-app navigation is the fast path; a full reload is the fallback whenever
 // it doesn't work out, so a change on the site slows the run down rather than
 // losing stories.
 async function openStoryButton(modelId) {
-  if (await openDialogInApp(modelId)) {
+  const leftovers = `${MODEL_AVATAR_SELECTOR}, ${selectors.storyViewerSelector}`;
+  if (await openDialogInApp(modelId, leftovers)) {
     try {
       return await findStoryButton(modelId);
     } catch {}

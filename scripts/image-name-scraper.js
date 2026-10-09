@@ -2,7 +2,12 @@ import { getModels, updateModelName, updateModelImage } from "../api/model.js";
 import { insertImage } from "../api/image.js";
 import { insertName } from "../api/name.js";
 import { printLine, wait } from "../util/helpers.js";
-import { getPage, surf, getDataUsageMB } from "../util/context.js";
+import {
+  getPage,
+  surf,
+  openDialogInApp,
+  getDataUsageMB,
+} from "../util/context.js";
 
 /* ===================== SELECTORS ===================== */
 
@@ -26,8 +31,9 @@ const isDeletedAccount = (name) =>
 
 /* ===================== SCRAPING ===================== */
 
-// Generous on purpose: the wait ends as soon as the form renders (~1s after
-// navigation), so it only runs to the limit when a page is slow or broken.
+// Generous on purpose: the wait ends as soon as the form renders (~150ms after
+// in-app navigation, ~1s after a reload), so it only runs to the limit when a
+// page is slow or broken.
 const PAGE_READY_TIMEOUT = 10000;
 
 // The image wasn't seen to arrive after the avatar in testing, but a missing
@@ -64,11 +70,26 @@ async function readProfile(modelId) {
   }
 }
 
-async function getProfile(modelId) {
+async function findProfile(modelId) {
   const profile = await readProfile(modelId);
   if (profile.image) return profile;
   await wait(NO_IMAGE_RECHECK_DELAY);
   return readProfile(modelId);
+}
+
+// In-app navigation is the fast path; a full reload is the fallback whenever
+// it doesn't work out, so a change on the site slows the run down rather than
+// losing names and images.
+async function getProfile(modelId) {
+  const leftovers = `${selectors.avatarSelector}, ${selectors.modelNameSelector}`;
+  if (await openDialogInApp(modelId, leftovers)) {
+    try {
+      return await findProfile(modelId);
+    } catch {}
+  }
+  console.warn(`↻ In-app navigation failed — reloading for model: ${modelId}`);
+  await surf(modelId);
+  return findProfile(modelId);
 }
 
 export async function scrapeName(modelId, name, currentName) {
@@ -133,8 +154,6 @@ export default async function scrape() {
     console.log(
       `🦅 Scraping model: ${model.id} (${index + 1}/${models.length})`,
     );
-    await surf(model.id);
-
     let profile;
     try {
       profile = await getProfile(model.id);
