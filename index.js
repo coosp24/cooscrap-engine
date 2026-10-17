@@ -33,9 +33,14 @@ const args = Object.fromEntries(
 
 const op = args.op || "scrape-stories";
 
+// --model=<id>[,<id>…] scrapes just those models' stories instead of all — for
+// trying a change against a single model without a full run. Such a test
+// isn't a real run, so it isn't written to scrape_logs.
+const onlyModel = typeof args.model === "string" ? args.model : null;
+
 // What each op runs. scrape-images also scrapes names (same popup visit).
 const OPS = {
-  "scrape-stories": () => scrapeStories(),
+  "scrape-stories": () => scrapeStories({ only: onlyModel }),
   "scrape-images": () => scrapeImages(),
   "download-images": () => downloadImages(),
   "download-stories": () => downloadStories(),
@@ -126,7 +131,7 @@ async function main() {
     const scraped = await run();
 
     const type = SCRAPE_LOG_TYPES[op];
-    if (type) {
+    if (type && !onlyModel) {
       await insertScrapeLog({
         type,
         startedAt,

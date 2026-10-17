@@ -94,3 +94,13 @@ export async function surf(modelId) {
     waitUntil: "domcontentloaded",
   });
 }
+
+// Her profile link, /id<id>, by a full load. It lands on the same invite form
+// as her dialog, but sending a request from there isn't held back by the
+// minutes limit coomeet puts on adding popular models. coomeet's app only
+// reads /id<id> as it starts up, so this is always a full load, never in-app.
+export async function surfProfile(modelId) {
+  await _page.goto(`${new URL(_config.url).origin}/id${modelId}`, {
+    waitUntil: "domcontentloaded",
+  });
+}

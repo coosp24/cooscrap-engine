@@ -4,6 +4,7 @@ import { printLine, wait } from "../util/helpers.js";
 import {
   getPage,
   surf,
+  surfProfile,
   openDialogInApp,
   getDataUsageMB,
 } from "../util/context.js";
@@ -35,6 +36,9 @@ const selectors = {
   storyViewerSelector: ".story-viewer",
 
   storySelector: ".story-viewer__video video",
+
+  // The invite form's blue button: sends her a friend request.
+  inviteButtonSelector: ".send-invite-form__actions .ui-simple-button.color-blue",
 
   guestModelNameSelector: ".send-invite-form__username",
 
@@ -142,10 +146,116 @@ async function openStoryButton(modelId) {
   return findStoryButton(modelId);
 }
 
+/* ===================== FRIEND REQUESTS ===================== */
+
+// coomeet only shows a model's story — her ring, on every page of hers, logged
+// in or out — to an account that has sent her a friend request or is her
+// friend. A model added to the collection without one never shows a story, so
+// the scraper sends the request itself, then reads her story as usual.
+//
+// No limit by default: every stranger in the collection is sent one, every
+// run. MAX_REQUESTS_PER_RUN can set a cap if one is ever wanted.
+const MAX_REQUESTS_PER_RUN = process.env.MAX_REQUESTS_PER_RUN
+  ? Number(process.env.MAX_REQUESTS_PER_RUN)
+  : Infinity;
+const REQUEST_SENT_TIMEOUT = 5000;
+
+let requestsSent = 0;
+
+// A stranger: her page is the plain invite form — no request waiting, not a
+// friend — which is the only case a request is sent for.
+async function isStranger() {
+  return getPage().evaluate((sel) => {
+    const visible = (s) =>
+      [...document.querySelectorAll(s)].some((el) => el.getBoundingClientRect().width > 0);
+    return (
+      visible(sel.guestAvatarSelector) &&
+      !visible(sel.hangedRequestAvatarSelector) &&
+      !visible(sel.friendAvatarSelector)
+    );
+  }, selectors);
+}
+
+// coomeet's refusal, e.g. "Action unavailable — Account blocked" when her own
+// account is blocked. It stays over the page until closed.
+const POPUP_SELECTOR = ".popup-overlay.visible";
+
+const closePopup = async () => {
+  const page = getPage();
+  await page.evaluate((sel) => {
+    const popup = document.querySelector(sel);
+    const close = [...(popup?.querySelectorAll("button, [class*='button']") ?? [])].find((el) =>
+      /close/i.test(el.innerText),
+    );
+    close?.click();
+  }, POPUP_SELECTOR);
+  await page.keyboard.press("Escape");
+};
+
+// Sends the request from her profile link, which adds her even when she's a
+// model coomeet won't let you add from elsewhere yet. Answers { sent: true }
+// once the page shows it went — the form turned into a waiting request, or the
+// button went away — or { sent: false, reason } with coomeet's refusal.
+async function sendFriendRequest(modelId) {
+  const page = getPage();
+  await surfProfile(modelId);
+  let button;
+  try {
+    button = await page.waitForFunction(
+      (sel) =>
+        [...document.querySelectorAll(sel)].find((el) => el.getBoundingClientRect().width > 0),
+      { timeout: PAGE_READY_TIMEOUT },
+      selectors.inviteButtonSelector,
+    );
+  } catch {
+    return { sent: false, reason: "her invite form didn't load" };
+  }
+  await button.asElement().click();
+  try {
+    const outcome = await page.waitForFunction(
+      (sel, popupSel) => {
+        const visible = (s) =>
+          [...document.querySelectorAll(s)].some((el) => el.getBoundingClientRect().width > 0);
+        if (visible(sel.hangedRequestAvatarSelector) || !visible(sel.inviteButtonSelector)) {
+          return { sent: true };
+        }
+        const popup = document.querySelector(popupSel);
+        if (popup) return { sent: false, reason: popup.innerText.replace(/\s+/g, " ").replace(/close$/i, "").trim() };
+        return null;
+      },
+      { timeout: REQUEST_SENT_TIMEOUT },
+      selectors,
+      POPUP_SELECTOR,
+    );
+    const result = await outcome.jsonValue();
+    if (!result.sent) await closePopup();
+    return result;
+  } catch {
+    return { sent: false, reason: "the page didn't react" };
+  }
+}
+
+// Her story button, sending her a request first when that's what's hiding it.
+async function storyButtonFor(modelId) {
+  const storyButton = await openStoryButton(modelId);
+  if (storyButton) return storyButton;
+  if (requestsSent >= MAX_REQUESTS_PER_RUN || !(await isStranger())) return null;
+
+  const request = await sendFriendRequest(modelId);
+  if (!request.sent) {
+    console.warn(`⚠️ Couldn't send a friend request to model: ${modelId} — ${request.reason}`);
+    return null;
+  }
+  requestsSent++;
+  console.log(`📨 Sent a friend request to model: ${modelId} (${requestsSent} this run)`);
+  // Her page is now the waiting-request form, which shows her ring.
+  return findStoryButton(modelId);
+}
+
 async function getVideoSrcFromPopup(modelId) {
   const page = getPage();
 
-  const storyButton = await openStoryButton(modelId);
+  const storyButton = await storyButtonFor(modelId);
   if (!storyButton) {
     throw new Error(`❌ Story does not exist for model: ${modelId}`);
   }
@@ -180,8 +290,11 @@ export async function scrapeStory(modelId) {
   }
 }
 
-export default async function scrape() {
-  const models = await getModels();
+export default async function scrape({ only = null } = {}) {
+  // `only` (index.js --model=<id>[,<id>…]): just those, for testing a change.
+  const models = only
+    ? only.split(",").map((id) => ({ id: id.trim(), name: null }))
+    : await getModels();
   let storiesScraped = 0;
 
   for (const [index, model] of models.entries()) {
@@ -196,6 +309,7 @@ export default async function scrape() {
 
   printLine();
   console.log(`🎞️  Stories scraped:  ${storiesScraped}`);
+  console.log(`📨 Requests sent:    ${requestsSent}`);
   console.log(`📡 Data consumed:    ${getDataUsageMB()} MB`);
   return storiesScraped;
 }
