@@ -1,12 +1,8 @@
+import { fetchAll } from "../util/fetch-all.js";
 import supabase from "../util/supabase.js";
 
-export const getImages = async () => {
-  const { data, error } = await supabase.from("images").select();
-  if (error) {
-    throw new Error(`❌ Failed to fetch model images: ${error.message}`);
-  }
-  return data;
-};
+// Every image row. Paged — a single request stops at 1000 rows.
+export const getImages = () => fetchAll("images", { label: "model images" });
 
 export const insertImage = async (modelId, image) => {
   const { error } = await supabase

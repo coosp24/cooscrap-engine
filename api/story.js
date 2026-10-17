@@ -1,12 +1,8 @@
+import { fetchAll } from "../util/fetch-all.js";
 import supabase from "../util/supabase.js";
 
-export const getStories = async () => {
-  const { data, error } = await supabase.from("stories").select();
-  if (error) {
-    throw new Error(`❌ Failed to fetch model stories: ${error.message}`);
-  }
-  return data;
-};
+// Every story row. Paged — a single request stops at 1000 rows.
+export const getStories = () => fetchAll("stories", { label: "model stories" });
 
 export const insertStory = async (modelId, storyUrl) => {
   const { error } = await supabase

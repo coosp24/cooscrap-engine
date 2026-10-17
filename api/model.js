@@ -1,15 +1,8 @@
+import { fetchAll } from "../util/fetch-all.js";
 import supabase from "../util/supabase.js";
 
-export const getModels = async () => {
-  const { data, error } = await supabase
-    .from("models")
-    .select()
-    .order("id", { ascending: true });
-  if (error) {
-    throw new Error(`❌ Failed to fetch model data: ${error.message}`);
-  }
-  return data;
-};
+// Every model, oldest first. Paged — a single request stops at 1000 rows.
+export const getModels = () => fetchAll("models", { label: "model data" });
 
 export const updateModelName = async (modelId, name) => {
   const { error } = await supabase
