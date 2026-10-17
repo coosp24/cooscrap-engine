@@ -3,7 +3,11 @@ import { click } from "./util/helpers.js";
 import { setContext } from "./util/context.js";
 import scrapeImages from "./scripts/image-name-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
-import { downloadImages, downloadStories } from "./scripts/media-downloader.js";
+import {
+  downloadMedia,
+  downloadImages,
+  downloadStories,
+} from "./scripts/media-downloader.js";
 import { insertScrapeLog } from "./api/scrape-log.js";
 import { getPrimaryAccount } from "./api/account.js";
 import { login } from "./util/form-logger.js";
@@ -38,12 +42,21 @@ const op = args.op || "scrape-stories";
 // isn't a real run, so it isn't written to scrape_logs.
 const onlyModel = typeof args.model === "string" ? args.model : null;
 
+// The download ops: --to=<folder> saves somewhere other than
+// Desktop/cooscrap-media, and --limit=N fetches at most N new files of each
+// kind, for trying it out.
+const downloadOptions = {
+  root: typeof args.to === "string" ? args.to : undefined,
+  limit: Number(args.limit) || null,
+};
+
 // What each op runs. scrape-images also scrapes names (same popup visit).
 const OPS = {
   "scrape-stories": () => scrapeStories({ only: onlyModel }),
   "scrape-images": () => scrapeImages(),
-  "download-images": () => downloadImages(),
-  "download-stories": () => downloadStories(),
+  download: () => downloadMedia(downloadOptions),
+  "download-images": () => downloadImages(downloadOptions),
+  "download-stories": () => downloadStories(downloadOptions),
 };
 
 // Ops that drive the site through the browser; the download ops only talk to

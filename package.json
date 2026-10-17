@@ -3,6 +3,7 @@
   "scripts": {
     "scrape:images": "node --env-file=.env . --op=scrape-images",
     "scrape:stories": "node --env-file=.env . --op=scrape-stories",
+    "download": "node --env-file=.env . --op=download",
     "download:images": "node --env-file=.env . --op=download-images",
     "download:stories": "node --env-file=.env . --op=download-stories",
     "dev": "node --env-file=.env index.js"
