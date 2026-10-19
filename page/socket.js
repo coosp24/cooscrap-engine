@@ -95,14 +95,16 @@
 
   // Everything the engine keeps about one model: { id, name, image,
   // deleted, story } — story is { src, storyId } or null — or { id, error }
-  // when coomeet didn't answer.
+  // when coomeet didn't answer. Both questions go out together: neither
+  // answer depends on the other.
   async function lookup(id, options) {
-    const contact = await ask("GetContact", { id: Number(id) }, options);
+    const [contact, reply] = await Promise.all([
+      ask("GetContact", { id: Number(id) }, options),
+      ask("GetAuthorStory", { womanId: Number(id) }, options),
+    ]);
     if (!contact) return { id, error: "no answer to GetContact" };
     const info = contact.data?.[String(id)];
     if (!info) return { id, error: `unexpected GetContact reply: ${JSON.stringify(contact).slice(0, 200)}` };
-
-    const reply = await ask("GetAuthorStory", { womanId: Number(id) }, options);
     if (!reply) return { id, error: "no answer to GetAuthorStory" };
     const story = reply.data?.story;
 

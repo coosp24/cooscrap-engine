@@ -16,9 +16,13 @@ import { getDataUsageMB, getPage } from "../util/context.js";
 
 /* ===================== SETTINGS ===================== */
 
-// Models looked up at a time. Each lookup is two quick requests (~0.2s);
-// a few at once is what makes the run fast, without hammering coomeet.
-const CONCURRENCY = 5;
+// Models looked up at a time. Each lookup is two requests sent together
+// (~0.12s), so 10 at a time is 20 requests in flight — measured clean at
+// that load (12ms a model, nothing failed). More would gain a few seconds
+// and look less like someone using the site.
+const CONCURRENCY = 10;
+// Models whose name and image are saved at a time, behind the lookups.
+const WRITE_CONCURRENCY = 5;
 // Models handed to the page per round, so the log and the saving move along
 // as the run goes.
 const CHUNK = 50;
@@ -70,7 +74,20 @@ export default async function sync({ only = null, dryRun = false, url }) {
   const savedStories = dryRun ? new Set((await getStories()).map((s) => s.story)) : null;
   if (dryRun) console.log("🧪 Dry run — nothing will be written");
 
-  const counts = { names: 0, images: 0, stories: 0, withStory: 0, deleted: 0, failed: 0 };
+  const counts = {
+    names: 0,
+    images: 0,
+    stories: 0,
+    withStory: 0,
+    deleted: 0,
+    lookupFailed: 0,
+    saveFailed: 0,
+  };
+
+  // Writes run behind the lookups: each chunk's saving is queued here, one
+  // chunk after another, while the next chunk is being looked up — so the
+  // run never waits on the database until the very end.
+  let saving = Promise.resolve();
 
   for (let from = 0; from < models.length; from += CHUNK) {
     const chunk = models.slice(from, from + CHUNK);
@@ -80,13 +97,15 @@ export default async function sync({ only = null, dryRun = false, url }) {
       { concurrency: CONCURRENCY, ...REQUEST },
     );
 
+    const label = `${from + 1}–${from + chunk.length} of ${models.length}`;
     printLine();
-    console.log(`🦅 Models ${from + 1}–${from + chunk.length} of ${models.length}`);
+    console.log(`🦅 Looked up models ${label}`);
+    const found = [];
     const stories = [];
     for (const [i, result] of results.entries()) {
       const model = chunk[i];
       if (result.error) {
-        counts.failed++;
+        counts.lookupFailed++;
         console.warn(`❌ ${model.id}: ${result.error}`);
         continue;
       }
@@ -108,37 +127,61 @@ export default async function sync({ only = null, dryRun = false, url }) {
           counts.images++;
           console.log(`🖼️  ${model.id}: new image ${result.image}`);
         }
-        continue;
+      } else {
+        found.push({ model, name, image: result.image });
       }
-      if ((await scrapeName(model.id, name, model.name)).scraped) counts.names++;
-      if (await scrapeImage(model.id, result.image, model.image)) counts.images++;
     }
 
-    // The chunk's stories in one request; only new ones are counted.
     if (dryRun) {
       const fresh = stories.filter((s) => !savedStories.has(s.story));
       counts.stories += fresh.length;
       for (const s of fresh) console.log(`🎞️  ${s.model_id}: new story ${s.story}`);
       console.log(`🧪 ${fresh.length} new of ${stories.length} current stories`);
-    } else if (stories.length) {
-      try {
-        const inserted = await insertStories(stories);
-        counts.stories += inserted.length;
-        for (const s of inserted) console.log(`✅ Inserted story for model: ${s.model_id}\n${s.story}`);
-        console.log(`💾 ${inserted.length} new of ${stories.length} current stories`);
-      } catch (error) {
-        counts.failed += stories.length;
-        console.warn(error.message);
-      }
+    } else {
+      saving = saving.then(() => saveChunk(label, found, stories, counts));
     }
   }
+  await saving;
 
   printLine();
-  console.log(`🦅 Models looked up:  ${models.length - counts.failed} of ${models.length}`);
+  console.log(`🦅 Models looked up:  ${models.length - counts.lookupFailed} of ${models.length}`);
   console.log(`🎞️  With a story now:  ${counts.withStory}`);
   console.log(`${dryRun ? "🧪 Would add" : "🆕 Added"}:          ${counts.stories} stories, ${counts.names} names, ${counts.images} images`);
   console.log(`🪦 Deleted accounts:  ${counts.deleted}`);
-  console.log(`⚠️  Failed:            ${counts.failed}`);
+  console.log(`⚠️  Lookups failed:    ${counts.lookupFailed}`);
+  if (!dryRun) console.log(`⚠️  Stories unsaved:   ${counts.saveFailed}`);
   console.log(`📡 Data consumed:     ${getDataUsageMB()} MB`);
   return { stories: counts.stories, images: counts.images };
+}
+
+/* ===================== SAVING ===================== */
+
+// Calls `fn` on every item, at most `limit` at a time.
+async function eachLimit(items, limit, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+// Saves one chunk: each model's name and image through scrapeName and
+// scrapeImage (which only touch the database when something changed), a
+// few models at a time, then the chunk's stories in one request — only new
+// ones are counted.
+async function saveChunk(label, found, stories, counts) {
+  await eachLimit(found, WRITE_CONCURRENCY, async ({ model, name, image }) => {
+    if ((await scrapeName(model.id, name, model.name)).scraped) counts.names++;
+    if (await scrapeImage(model.id, image, model.image)) counts.images++;
+  });
+  if (!stories.length) return;
+  try {
+    const inserted = await insertStories(stories);
+    counts.stories += inserted.length;
+    for (const s of inserted) console.log(`✅ Inserted story for model: ${s.model_id}\n${s.story}`);
+    console.log(`💾 Models ${label}: ${inserted.length} new of ${stories.length} current stories`);
+  } catch (error) {
+    counts.saveFailed += stories.length;
+    console.warn(error.message);
+  }
 }
