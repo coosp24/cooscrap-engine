@@ -14,6 +14,7 @@ on:
         options:
           - scrape-stories
           - scrape-images
+          - sync
 
 # Only one scrape at a time. Runs are started by the schedule and by hand from
 # the dashboard, and two browsers driving the site with the same primary

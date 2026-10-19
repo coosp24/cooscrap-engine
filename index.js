@@ -3,6 +3,7 @@ import { click } from "./util/helpers.js";
 import { setContext } from "./util/context.js";
 import scrapeImages from "./scripts/image-name-scraper.js";
 import scrapeStories from "./scripts/story-scraper.js";
+import sync, { injectSocket } from "./scripts/sync.js";
 import {
   downloadMedia,
   downloadImages,
@@ -42,6 +43,11 @@ const op = args.op || "scrape-stories";
 // isn't a real run, so it isn't written to scrape_logs.
 const onlyModel = typeof args.model === "string" ? args.model : null;
 
+// --dry-run (sync only) looks everything up and reports what would change,
+// writing nothing — for comparing sync with the old ops. Not a real run
+// either, so it isn't written to scrape_logs.
+const dryRun = args["dry-run"] === true;
+
 // The download ops: --to=<folder> saves somewhere other than
 // Desktop/cooscrap-media, and --limit=N fetches at most N new files of each
 // kind, for trying it out.
@@ -50,10 +56,12 @@ const downloadOptions = {
   limit: Number(args.limit) || null,
 };
 
-// What each op runs. scrape-images also scrapes names (same popup visit).
+// What each op runs. scrape-images also scrapes names (same popup visit);
+// sync does stories, images and names together, from coomeet's server.
 const OPS = {
   "scrape-stories": () => scrapeStories({ only: onlyModel }),
   "scrape-images": () => scrapeImages(),
+  sync: () => sync({ only: onlyModel, dryRun, url: CONFIG.url }),
   download: () => downloadMedia(downloadOptions),
   "download-images": () => downloadImages(downloadOptions),
   "download-stories": () => downloadStories(downloadOptions),
@@ -61,17 +69,21 @@ const OPS = {
 
 // Ops that drive the site through the browser; the download ops only talk to
 // the DB/CDN and skip the whole browser setup.
-const BROWSER_OPS = new Set(["scrape-images", "scrape-stories"]);
+const BROWSER_OPS = new Set(["scrape-images", "scrape-stories", "sync"]);
 
 // Ops that require being logged in. Image/name scraping reads the guest
 // invite form, which only renders logged OUT — logging in swaps every model
-// to the friend UI and the scrape fails, so it must never log in.
-const LOGIN_OPS = new Set(["scrape-stories"]);
+// to the friend UI and the scrape fails, so it must never log in. sync reads
+// names and images from the server, not the page, so logging in is fine.
+const LOGIN_OPS = new Set(["scrape-stories", "sync"]);
 
 // Scrape ops record a scrape_logs row when they finish (download ops don't).
+// sync records two — its stories and its images — since scrape_logs only
+// knows those two types.
 const SCRAPE_LOG_TYPES = {
   "scrape-stories": "story",
   "scrape-images": "image",
+  sync: { story: "stories", image: "images" },
 };
 
 /* ===================== MAIN ===================== */
@@ -132,6 +144,7 @@ async function main() {
     browser = await launchBrowser();
     const page = await browser.newPage();
     await setContext(page, CONFIG);
+    if (op === "sync") await injectSocket(page);
     await page.goto(CONFIG.url, { waitUntil: "domcontentloaded" });
     await click(page, ".gender-item.male");
     await click(page, ".terms-actions button, .terms-actions div");
@@ -144,13 +157,19 @@ async function main() {
     const scraped = await run();
 
     const type = SCRAPE_LOG_TYPES[op];
-    if (type && !onlyModel) {
-      await insertScrapeLog({
-        type,
-        startedAt,
-        finishedAt: new Date(),
-        scraped: scraped ?? 0,
-      });
+    if (type && !onlyModel && !dryRun) {
+      const finishedAt = new Date();
+      // An op logging several types answers its counts by name ({ stories,
+      // images }); the others answer one number.
+      const logs = typeof type === "string" ? { [type]: null } : type;
+      for (const [logType, key] of Object.entries(logs)) {
+        await insertScrapeLog({
+          type: logType,
+          startedAt,
+          finishedAt,
+          scraped: (key ? scraped?.[key] : scraped) ?? 0,
+        });
+      }
     }
   } catch (error) {
     console.error(error.message);
