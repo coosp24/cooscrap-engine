@@ -29,8 +29,13 @@ const CHUNK = 50;
 // A request coomeet doesn't answer in `timeout` is asked again, up to
 // `attempts` times in all, `retryDelay` apart.
 const REQUEST = { timeout: 5000, attempts: 4, retryDelay: 2000 };
-// How long coomeet's connection gets to open and be authorized.
+// How long coomeet's connection gets to open and be authorized. Now and then
+// it doesn't open at all (it has failed for the engine and cooscrap/archive
+// in the same minute, so it's coomeet's side), so the page is reloaded and
+// waited on again, READY_ATTEMPTS times in all, READY_RETRY_DELAY apart.
 const READY_TIMEOUT = 20000;
+const READY_ATTEMPTS = 3;
+const READY_RETRY_DELAY = 10000;
 
 // What the site shows instead of a name once a model's account is gone.
 // Those models are renamed by hand in the dashboard, so it's never recorded.
@@ -71,6 +76,31 @@ export async function injectSocket(page) {
   await page.evaluateOnNewDocument(source);
 }
 
+// Waits for coomeet's connection to open and be authorized, reloading the
+// page while it doesn't (see READY_ATTEMPTS). Each failure logs why.
+async function waitForSocket(page) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await page.waitForFunction(() => window.__cooscrap.socketReady(), {
+        timeout: READY_TIMEOUT,
+      });
+      return;
+    } catch {
+      const status = await page
+        .evaluate(() => window.__cooscrap.socketStatus())
+        .catch(() => "the page didn't answer");
+      if (attempt >= READY_ATTEMPTS) {
+        throw new Error(`❌ coomeet's connection didn't open — ${status}`);
+      }
+      console.warn(
+        `⚠️ coomeet's connection didn't open (${status}) — reloading (${attempt}/${READY_ATTEMPTS - 1})`,
+      );
+      await new Promise((r) => setTimeout(r, READY_RETRY_DELAY));
+      await page.reload({ waitUntil: "domcontentloaded" });
+    }
+  }
+}
+
 /* ===================== SCRAPE ===================== */
 
 // `only` (index.js --model=<id>[,<id>…]): just those, for testing a change.
@@ -86,13 +116,7 @@ export default async function scrapeModels({ only = null, dryRun = false, url })
 
   const page = getPage();
   await page.goto(url, { waitUntil: "domcontentloaded" });
-  try {
-    await page.waitForFunction(() => window.__cooscrap.socketReady(), {
-      timeout: READY_TIMEOUT,
-    });
-  } catch {
-    throw new Error("❌ coomeet's connection didn't open");
-  }
+  await waitForSocket(page);
   // A dry run inserts nothing, so it compares against the stories already
   // saved to tell which would be new.
   const savedStories = dryRun ? new Set((await getStories()).map((s) => s.story)) : null;

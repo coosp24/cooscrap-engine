@@ -27,6 +27,8 @@
   // "Authorization" message: one sent before that is silently dropped.
   let socket = null;
   let authorized = false;
+  // The close code of the app's socket, if coomeet has closed it.
+  let closeCode = null;
   const Base = window.WebSocket;
   window.WebSocket = new Proxy(Base, {
     construct(target, args) {
@@ -34,6 +36,10 @@
       if (!String(args[0]).includes(SOCKET)) return ws;
       socket = ws;
       authorized = false;
+      closeCode = null;
+      ws.addEventListener("close", (event) => {
+        if (ws === socket) closeCode = event.code;
+      });
       ws.addEventListener("message", async (event) => {
         let msg;
         try {
@@ -51,6 +57,15 @@
   });
 
   const ready = () => authorized && socket?.readyState === WebSocket.OPEN;
+
+  // Why the connection isn't ready, for the log when it doesn't open in time.
+  const socketStatus = () => {
+    if (!socket) return "the app never opened its socket";
+    if (closeCode != null) return `coomeet closed the socket (code ${closeCode})`;
+    if (socket.readyState === WebSocket.CONNECTING) return "the socket was still connecting";
+    if (!authorized) return "the socket opened, but coomeet never authorized it";
+    return "the socket is ready";
+  };
 
   // Sends one command and resolves with the server's reply, or with
   // { timeout: true } if none comes within `timeout`.
@@ -131,5 +146,5 @@
     return results;
   }
 
-  window.__cooscrap = { ...window.__cooscrap, socketReady: ready, lookupModels };
+  window.__cooscrap = { ...window.__cooscrap, socketReady: ready, socketStatus, lookupModels };
 })();
