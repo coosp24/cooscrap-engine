@@ -13,6 +13,11 @@ on:
         default: scrape-models
         options:
           - scrape-models
+      # The dashboard's guest mode (scrape_jobs.guest): run logged out.
+      guest:
+        description: Run as a guest (not logged in)
+        type: boolean
+        default: false
 
 # Only one scrape at a time. Runs are started by the schedule and by hand from
 # the dashboard, and two browsers driving the site with the same primary
@@ -53,4 +58,4 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb
 
       - name: Run scraper (${{ env.OP }})
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node . --op=$OP
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" node . --op=$OP ${{ inputs.guest && '--guest' || '' }}
