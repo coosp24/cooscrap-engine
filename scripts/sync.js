@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { getModels } from "../api/model.js";
+import { getModels, updateModelImage, updateModelName } from "../api/model.js";
+import { insertName } from "../api/name.js";
+import { insertImage } from "../api/image.js";
 import { getStories, insertStories } from "../api/story.js";
-import { scrapeImage, scrapeName } from "./image-name-scraper.js";
 import { printLine } from "../util/helpers.js";
 import { getDataUsageMB, getPage } from "../util/context.js";
 
@@ -32,9 +33,35 @@ const REQUEST = { timeout: 5000, attempts: 4, retryDelay: 2000 };
 // How long coomeet's connection gets to open and be authorized.
 const READY_TIMEOUT = 20000;
 
-// coomeet's placeholder name for a deleted account. scrapeName keeps the
-// dashboard's name instead of recording it.
-const DELETED_ACCOUNT_NAME = "Account deleted";
+// What the site shows instead of a name once a model's account is gone (as
+// in image-name-scraper.js). Those models are renamed by hand in the
+// dashboard, so it's never recorded.
+const isDeletedName = (name) => name?.trim().toLowerCase() === "account deleted";
+
+/* ===================== LOG ===================== */
+
+// The run's own messages — start, end, problems with saving — stand apart
+// from the model blocks, which are separated by printLine's thinner rule.
+function printSection(...lines) {
+  console.log("═".repeat(79));
+  for (const line of lines) console.log(line);
+}
+
+// One model's block: what coomeet has for her now, and what became of it.
+function printModel({ index, total, model, lookup, name, image, story }) {
+  printLine();
+  console.log(`🦅 Model ${index} of ${total}`);
+  console.log(`👤 Model id:  ${model.id}`);
+  if (lookup.error) {
+    console.log(`❌ Lookup failed — ${lookup.error}`);
+    return;
+  }
+  // "value — what became of it", or just the outcome when there's no value.
+  const line = (value, outcome) => (value ? `${value} — ${outcome}` : outcome);
+  console.log(`🏷️  Name:      ${line(lookup.name, name)}`);
+  console.log(`🖼️  Image:     ${line(lookup.image, image)}`);
+  console.log(`🎞️  Story:     ${line(lookup.story?.src, story)}`);
+}
 
 /* ===================== PAGE ===================== */
 
@@ -56,9 +83,6 @@ export default async function sync({ only = null, dryRun = false, url }) {
   const all = await getModels();
   const wanted = only ? new Set(only.split(",").map((id) => id.trim())) : null;
   const models = wanted ? all.filter((m) => wanted.has(String(m.id))) : all;
-  if (wanted && models.length < wanted.size) {
-    console.warn(`⚠️ Not in the models table, skipped: ${[...wanted].filter((id) => !models.some((m) => String(m.id) === id)).join(", ")}`);
-  }
 
   const page = getPage();
   await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -72,7 +96,14 @@ export default async function sync({ only = null, dryRun = false, url }) {
   // A dry run inserts nothing, so it compares against the stories already
   // saved to tell which would be new.
   const savedStories = dryRun ? new Set((await getStories()).map((s) => s.story)) : null;
-  if (dryRun) console.log("🧪 Dry run — nothing will be written");
+
+  printSection(
+    `🔄 Sync: ${models.length} models — names, images and stories`,
+    ...(dryRun ? ["🧪 Dry run — nothing will be written"] : []),
+    ...(wanted && models.length < wanted.size
+      ? [`⚠️  Not in the models table, skipped: ${[...wanted].filter((id) => !models.some((m) => String(m.id) === id)).join(", ")}`]
+      : []),
+  );
 
   const counts = {
     names: 0,
@@ -86,71 +117,53 @@ export default async function sync({ only = null, dryRun = false, url }) {
 
   // Writes run behind the lookups: each chunk's saving is queued here, one
   // chunk after another, while the next chunk is being looked up — so the
-  // run never waits on the database until the very end.
+  // run never waits on the database until the very end. A chunk's model
+  // blocks are printed once it's saved, in order.
   let saving = Promise.resolve();
 
   for (let from = 0; from < models.length; from += CHUNK) {
     const chunk = models.slice(from, from + CHUNK);
-    const results = await page.evaluate(
+    const lookups = await page.evaluate(
       (ids, options) => window.__cooscrap.lookupModels(ids, options),
       chunk.map((m) => String(m.id)),
       { concurrency: CONCURRENCY, ...REQUEST },
     );
 
-    const label = `${from + 1}–${from + chunk.length} of ${models.length}`;
-    printLine();
-    console.log(`🦅 Looked up models ${label}`);
-    const found = [];
-    const stories = [];
-    for (const [i, result] of results.entries()) {
-      const model = chunk[i];
-      if (result.error) {
-        counts.lookupFailed++;
-        console.warn(`❌ ${model.id}: ${result.error}`);
-        continue;
-      }
-      if (result.deleted) counts.deleted++;
-      if (result.story) {
-        counts.withStory++;
-        stories.push({ model_id: model.id, story: result.story.src });
-      }
-
-      // A deleted account is handed to scrapeName under coomeet's
-      // placeholder, so it keeps the name the dashboard gave her.
-      const name = result.deleted ? DELETED_ACCOUNT_NAME : result.name;
-      if (dryRun) {
-        if (!result.deleted && name && name !== model.name) {
-          counts.names++;
-          console.log(`🏷️  ${model.id}: name ${model.name ?? "—"} → ${name}`);
-        }
-        if (result.image && result.image !== model.image) {
-          counts.images++;
-          console.log(`🖼️  ${model.id}: new image ${result.image}`);
-        }
-      } else {
-        found.push({ model, name, image: result.image });
-      }
+    const entries = chunk.map((model, i) => ({
+      index: from + i + 1,
+      total: models.length,
+      model,
+      lookup: lookups[i],
+    }));
+    for (const { lookup } of entries) {
+      if (lookup.error) counts.lookupFailed++;
+      if (lookup.deleted) counts.deleted++;
+      if (lookup.story) counts.withStory++;
     }
 
     if (dryRun) {
-      const fresh = stories.filter((s) => !savedStories.has(s.story));
-      counts.stories += fresh.length;
-      for (const s of fresh) console.log(`🎞️  ${s.model_id}: new story ${s.story}`);
-      console.log(`🧪 ${fresh.length} new of ${stories.length} current stories`);
+      for (const entry of entries) {
+        preview(entry, savedStories, counts);
+        printModel(entry);
+      }
     } else {
-      saving = saving.then(() => saveChunk(label, found, stories, counts));
+      saving = saving.then(async () => {
+        await saveChunk(entries, counts);
+        entries.forEach(printModel);
+      });
     }
   }
   await saving;
 
-  printLine();
-  console.log(`🦅 Models looked up:  ${models.length - counts.lookupFailed} of ${models.length}`);
-  console.log(`🎞️  With a story now:  ${counts.withStory}`);
-  console.log(`${dryRun ? "🧪 Would add" : "🆕 Added"}:          ${counts.stories} stories, ${counts.names} names, ${counts.images} images`);
-  console.log(`🪦 Deleted accounts:  ${counts.deleted}`);
-  console.log(`⚠️  Lookups failed:    ${counts.lookupFailed}`);
-  if (!dryRun) console.log(`⚠️  Stories unsaved:   ${counts.saveFailed}`);
-  console.log(`📡 Data consumed:     ${getDataUsageMB()} MB`);
+  printSection(
+    `🦅 Models looked up:  ${models.length - counts.lookupFailed} of ${models.length}`,
+    `🎞️  With a story now:  ${counts.withStory}`,
+    `${dryRun ? "🧪 Would add" : "🆕 Added"}:          ${counts.stories} stories, ${counts.names} names, ${counts.images} images`,
+    `🪦 Deleted accounts:  ${counts.deleted}`,
+    `⚠️  Lookups failed:    ${counts.lookupFailed}`,
+    ...(dryRun ? [] : [`⚠️  Stories unsaved:   ${counts.saveFailed}`]),
+    `📡 Data consumed:     ${getDataUsageMB()} MB`,
+  );
   return { stories: counts.stories, images: counts.images };
 }
 
@@ -165,23 +178,96 @@ async function eachLimit(items, limit, fn) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-// Saves one chunk: each model's name and image through scrapeName and
-// scrapeImage (which only touch the database when something changed), a
-// few models at a time, then the chunk's stories in one request — only new
-// ones are counted.
-async function saveChunk(label, found, stories, counts) {
-  await eachLimit(found, WRITE_CONCURRENCY, async ({ model, name, image }) => {
-    if ((await scrapeName(model.id, name, model.name)).scraped) counts.names++;
-    if (await scrapeImage(model.id, image, model.image)) counts.images++;
-  });
-  if (!stories.length) return;
+// Her name, saved the way scrapeName (image-name-scraper.js) does: a
+// deleted account keeps the dashboard's name, an unchanged one is left
+// alone, and a new one goes into the history (a duplicate isn't counted)
+// and onto her row. Answers what happened, for her block.
+async function saveName(model, lookup, counts) {
+  if (lookup.deleted || isDeletedName(lookup.name)) {
+    return `🪦 account deleted — kept "${model.name ?? "—"}"`;
+  }
+  if (!lookup.name) return "❌ not found";
+  if (lookup.name === model.name) return "unchanged";
   try {
-    const inserted = await insertStories(stories);
-    counts.stories += inserted.length;
-    for (const s of inserted) console.log(`✅ Inserted story for model: ${s.model_id}\n${s.story}`);
-    console.log(`💾 Models ${label}: ${inserted.length} new of ${stories.length} current stories`);
+    const { inserted } = await insertName(model.id, lookup.name);
+    await updateModelName(model.id, lookup.name);
+    if (!inserted) return `already in her history — was "${model.name ?? "—"}"`;
+    counts.names++;
+    return `🆕 new — was "${model.name ?? "—"}"`;
   } catch (error) {
-    counts.saveFailed += stories.length;
-    console.warn(error.message);
+    return `❌ ${error.message}`;
+  }
+}
+
+// Her image, saved the way scrapeImage does.
+async function saveImage(model, lookup, counts) {
+  if (!lookup.image) return "none";
+  if (lookup.image === model.image) return "unchanged";
+  try {
+    const { inserted } = await insertImage(model.id, lookup.image);
+    await updateModelImage(model.id, lookup.image);
+    if (!inserted) return "already saved";
+    counts.images++;
+    return "🆕 new";
+  } catch (error) {
+    return `❌ ${error.message}`;
+  }
+}
+
+// Saves one chunk: names and images a few models at a time, then the
+// chunk's stories in one request. Fills in each entry's name, image and
+// story outcome for its block.
+async function saveChunk(entries, counts) {
+  const found = entries.filter((e) => !e.lookup.error);
+  await eachLimit(found, WRITE_CONCURRENCY, async (entry) => {
+    entry.name = await saveName(entry.model, entry.lookup, counts);
+    entry.image = await saveImage(entry.model, entry.lookup, counts);
+  });
+
+  const withStory = found.filter((e) => e.lookup.story);
+  for (const e of found) if (!e.lookup.story) e.story = "none";
+  if (!withStory.length) return;
+  try {
+    const inserted = await insertStories(
+      withStory.map((e) => ({ model_id: e.model.id, story: e.lookup.story.src })),
+    );
+    const fresh = new Set(inserted.map((s) => s.story));
+    counts.stories += fresh.size;
+    for (const e of withStory) e.story = fresh.has(e.lookup.story.src) ? "🆕 new" : "already saved";
+  } catch (error) {
+    counts.saveFailed += withStory.length;
+    for (const e of withStory) e.story = "❌ not saved";
+    printSection(error.message);
+  }
+}
+
+// A dry run's version of saveChunk: what each would become, written nowhere.
+function preview(entry, savedStories, counts) {
+  const { model, lookup } = entry;
+  if (lookup.error) return;
+
+  if (lookup.deleted || isDeletedName(lookup.name)) {
+    entry.name = `🪦 account deleted — would keep "${model.name ?? "—"}"`;
+  } else if (!lookup.name) {
+    entry.name = "❌ not found";
+  } else if (lookup.name === model.name) {
+    entry.name = "unchanged";
+  } else {
+    counts.names++;
+    entry.name = `🧪 would change — was "${model.name ?? "—"}"`;
+  }
+
+  if (!lookup.image) entry.image = "none";
+  else if (lookup.image === model.image) entry.image = "unchanged";
+  else {
+    counts.images++;
+    entry.image = "🧪 would add";
+  }
+
+  if (!lookup.story) entry.story = "none";
+  else if (savedStories.has(lookup.story.src)) entry.story = "already saved";
+  else {
+    counts.stories++;
+    entry.story = "🧪 would add";
   }
 }
