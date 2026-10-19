@@ -3,7 +3,7 @@ import { getModels, updateModelImage, updateModelName } from "../api/model.js";
 import { insertName } from "../api/name.js";
 import { insertImage } from "../api/image.js";
 import { getStories, insertStories } from "../api/story.js";
-import { printLine } from "../util/helpers.js";
+import { isDev, printLine } from "../util/helpers.js";
 import { getDataUsageMB, getPage } from "../util/context.js";
 
 // One run for all three: every model's name, image and current story, read
@@ -46,7 +46,9 @@ function printSection(...lines) {
 }
 
 // One model's block: what coomeet has for her now, and what became of it.
+// Development only; otherwise the final report sums them up.
 function printModel({ index, total, model, lookup, name, image, story }) {
+  if (!isDev) return;
   printLine();
   console.log(`🦅 Model ${index} of ${total}`);
   console.log(`👤 Model id:  ${model.id}`);
