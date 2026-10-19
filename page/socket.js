@@ -1,4 +1,4 @@
-// Runs in the page's own world, before coomeet's code (see scripts/sync.js).
+// Runs in the page's own world, before coomeet's code (see scripts/model-scraper.js).
 // Looks models up straight from coomeet's server, over the app's own
 // logged-in websocket, instead of opening each one's dialog page.
 //

@@ -1,8 +1,4 @@
-import { fetchAll } from "../util/fetch-all.js";
 import supabase from "../util/supabase.js";
-
-// Every image row. Paged — a single request stops at 1000 rows.
-export const getImages = () => fetchAll("images", { label: "model images" });
 
 export const insertImage = async (modelId, image) => {
   const { error } = await supabase

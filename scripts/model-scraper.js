@@ -9,8 +9,7 @@ import { getDataUsageMB, getPage } from "../util/context.js";
 // One run for all three: every model's name, image and current story, read
 // straight from coomeet's server (page/socket.js) instead of opening each
 // model's dialog page — so no page renders to wait for, and several models
-// are looked up at once. The old scrape-stories and scrape-images ops still
-// work, and read the same things the slow way.
+// are looked up at once.
 //
 // No friend requests: coomeet hands over a stranger's story too; the request
 // was only ever needed to make the story ring show on her page.
@@ -33,9 +32,8 @@ const REQUEST = { timeout: 5000, attempts: 4, retryDelay: 2000 };
 // How long coomeet's connection gets to open and be authorized.
 const READY_TIMEOUT = 20000;
 
-// What the site shows instead of a name once a model's account is gone (as
-// in image-name-scraper.js). Those models are renamed by hand in the
-// dashboard, so it's never recorded.
+// What the site shows instead of a name once a model's account is gone.
+// Those models are renamed by hand in the dashboard, so it's never recorded.
 const isDeletedName = (name) => name?.trim().toLowerCase() === "account deleted";
 
 /* ===================== LOG ===================== */
@@ -71,13 +69,13 @@ export async function injectSocket(page) {
   await page.evaluateOnNewDocument(source);
 }
 
-/* ===================== SYNC ===================== */
+/* ===================== SCRAPE ===================== */
 
 // `only` (index.js --model=<id>[,<id>…]): just those, for testing a change.
 // `dryRun`: look everything up and report what would change, writing
 // nothing. `url`: a page of coomeet's app to work from, reloaded so its
 // connection opens logged in.
-export default async function sync({ only = null, dryRun = false, url }) {
+export default async function scrapeModels({ only = null, dryRun = false, url }) {
   // Even for --model, her row comes from the database: the name and image
   // there are what a change is measured against.
   const all = await getModels();
@@ -98,7 +96,7 @@ export default async function sync({ only = null, dryRun = false, url }) {
   const savedStories = dryRun ? new Set((await getStories()).map((s) => s.story)) : null;
 
   printSection(
-    `🔄 Sync: ${models.length} models — names, images and stories`,
+    `🔄 Scraping ${models.length} models — names, images and stories`,
     ...(dryRun ? ["🧪 Dry run — nothing will be written"] : []),
     ...(wanted && models.length < wanted.size
       ? [`⚠️  Not in the models table, skipped: ${[...wanted].filter((id) => !models.some((m) => String(m.id) === id)).join(", ")}`]
@@ -178,39 +176,38 @@ async function eachLimit(items, limit, fn) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-// Her name, saved the way scrapeName (image-name-scraper.js) does: a
-// deleted account keeps the dashboard's name, an unchanged one is left
-// alone, and a new one goes into the history (a duplicate isn't counted)
-// and onto her row. Answers what happened, for her block.
+// Her name: a deleted account keeps the dashboard's name, an unchanged one
+// is left alone, and a new one goes into the history (a duplicate isn't
+// counted) and onto her row. Answers what happened, for her block.
 async function saveName(model, lookup, counts) {
   if (lookup.deleted || isDeletedName(lookup.name)) {
-    return `🪦 account deleted — kept "${model.name ?? "—"}"`;
+    return `🪦 Account deleted — kept "${model.name ?? "—"}"`;
   }
-  if (!lookup.name) return "❌ not found";
-  if (lookup.name === model.name) return "unchanged";
+  if (!lookup.name) return "❌ Not found";
+  if (lookup.name === model.name) return "⚠️  Unchanged";
   try {
     const { inserted } = await insertName(model.id, lookup.name);
     await updateModelName(model.id, lookup.name);
-    if (!inserted) return `already in her history — was "${model.name ?? "—"}"`;
+    if (!inserted) return `⚠️  Already in her history — was "${model.name ?? "—"}"`;
     counts.names++;
-    return `🆕 new — was "${model.name ?? "—"}"`;
+    return `✅ New — was "${model.name ?? "—"}"`;
   } catch (error) {
-    return `❌ ${error.message}`;
+    return error.message;
   }
 }
 
-// Her image, saved the way scrapeImage does.
+// Her image, the same way (a deleted account's image is still kept).
 async function saveImage(model, lookup, counts) {
-  if (!lookup.image) return "none";
-  if (lookup.image === model.image) return "unchanged";
+  if (!lookup.image) return "⚠️  None";
+  if (lookup.image === model.image) return "⚠️  Unchanged";
   try {
     const { inserted } = await insertImage(model.id, lookup.image);
     await updateModelImage(model.id, lookup.image);
-    if (!inserted) return "already saved";
+    if (!inserted) return "⚠️  Already saved";
     counts.images++;
-    return "🆕 new";
+    return "✅ New";
   } catch (error) {
-    return `❌ ${error.message}`;
+    return error.message;
   }
 }
 
@@ -225,7 +222,7 @@ async function saveChunk(entries, counts) {
   });
 
   const withStory = found.filter((e) => e.lookup.story);
-  for (const e of found) if (!e.lookup.story) e.story = "none";
+  for (const e of found) if (!e.lookup.story) e.story = "⚠️  None";
   if (!withStory.length) return;
   try {
     const inserted = await insertStories(
@@ -233,10 +230,10 @@ async function saveChunk(entries, counts) {
     );
     const fresh = new Set(inserted.map((s) => s.story));
     counts.stories += fresh.size;
-    for (const e of withStory) e.story = fresh.has(e.lookup.story.src) ? "🆕 new" : "already saved";
+    for (const e of withStory) e.story = fresh.has(e.lookup.story.src) ? "✅ New" : "⚠️  Already saved";
   } catch (error) {
     counts.saveFailed += withStory.length;
-    for (const e of withStory) e.story = "❌ not saved";
+    for (const e of withStory) e.story = "❌ Not saved";
     printSection(error.message);
   }
 }
@@ -247,27 +244,27 @@ function preview(entry, savedStories, counts) {
   if (lookup.error) return;
 
   if (lookup.deleted || isDeletedName(lookup.name)) {
-    entry.name = `🪦 account deleted — would keep "${model.name ?? "—"}"`;
+    entry.name = `🪦 Account deleted — would keep "${model.name ?? "—"}"`;
   } else if (!lookup.name) {
-    entry.name = "❌ not found";
+    entry.name = "❌ Not found";
   } else if (lookup.name === model.name) {
-    entry.name = "unchanged";
+    entry.name = "⚠️  Unchanged";
   } else {
     counts.names++;
-    entry.name = `🧪 would change — was "${model.name ?? "—"}"`;
+    entry.name = `🧪 Would change — was "${model.name ?? "—"}"`;
   }
 
-  if (!lookup.image) entry.image = "none";
-  else if (lookup.image === model.image) entry.image = "unchanged";
+  if (!lookup.image) entry.image = "⚠️  None";
+  else if (lookup.image === model.image) entry.image = "⚠️  Unchanged";
   else {
     counts.images++;
-    entry.image = "🧪 would add";
+    entry.image = "🧪 Would add";
   }
 
-  if (!lookup.story) entry.story = "none";
-  else if (savedStories.has(lookup.story.src)) entry.story = "already saved";
+  if (!lookup.story) entry.story = "⚠️  None";
+  else if (savedStories.has(lookup.story.src)) entry.story = "⚠️  Already saved";
   else {
     counts.stories++;
-    entry.story = "🧪 would add";
+    entry.story = "🧪 Would add";
   }
 }

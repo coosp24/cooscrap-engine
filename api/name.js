@@ -1,8 +1,4 @@
-import { fetchAll } from "../util/fetch-all.js";
 import supabase from "../util/supabase.js";
-
-// Every name row. Paged — a single request stops at 1000 rows.
-export const getNames = () => fetchAll("names", { label: "model names" });
 
 export const insertName = async (modelId, name) => {
   const { error } = await supabase

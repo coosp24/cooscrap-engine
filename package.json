@@ -1,12 +1,9 @@
 {
   "type": "module",
   "scripts": {
-    "scrape:images": "node --env-file=.env . --op=scrape-images",
-    "scrape:stories": "node --env-file=.env . --op=scrape-stories",
-    "sync": "node --env-file=.env . --op=sync",
-    "download": "node --env-file=.env . --op=download",
-    "download:images": "node --env-file=.env . --op=download-images",
-    "download:stories": "node --env-file=.env . --op=download-stories",
+    "scrape": "node --env-file=.env . --op=scrape-models",
+    "scrape:dry": "node --env-file=.env . --op=scrape-models --dry-run",
+    "scrape:guest": "node --env-file=.env . --op=scrape-models --guest",
     "dev": "node --env-file=.env index.js"
   },
   "dependencies": {

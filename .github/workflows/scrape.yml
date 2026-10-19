@@ -10,11 +10,9 @@ on:
       op:
         description: Operation to run
         type: choice
-        default: scrape-stories
+        default: scrape-models
         options:
-          - scrape-stories
-          - scrape-images
-          - sync
+          - scrape-models
 
 # Only one scrape at a time. Runs are started by the schedule and by hand from
 # the dashboard, and two browsers driving the site with the same primary
@@ -33,7 +31,7 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       # Login credentials come from the account marked primary in the dashboard,
       # and `accounts` is admin-only under RLS — reading it needs the service
-      # role key. Story runs (the ones that log in) fail without this secret.
+      # role key. Every run logs in, so every run fails without this secret.
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       # ubuntu-latest ships with Google Chrome preinstalled here
       BROWSER_PATH: /usr/bin/google-chrome
