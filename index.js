@@ -1,5 +1,5 @@
 import puppeteer from "puppeteer-core";
-import { click } from "./util/helpers.js";
+import { passIntro } from "./util/helpers.js";
 import { setContext } from "./util/context.js";
 import scrapeModels, { injectSocket } from "./scripts/model-scraper.js";
 import { insertScrapeLog } from "./api/scrape-log.js";
@@ -106,8 +106,7 @@ async function main() {
     await setContext(page, CONFIG);
     await injectSocket(page);
     await page.goto(CONFIG.url, { waitUntil: "domcontentloaded" });
-    await click(page, ".gender-item.male");
-    await click(page, ".terms-actions button, .terms-actions div");
+    await passIntro(page);
 
     // The same login as cooscrap/archive, which has never failed there: the
     // form is filled in here, then the scraper reloads the page and waits for

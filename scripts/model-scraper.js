@@ -3,7 +3,7 @@ import { getModels, updateModelImage, updateModelName } from "../api/model.js";
 import { insertName } from "../api/name.js";
 import { insertImage } from "../api/image.js";
 import { getStories, insertStories } from "../api/story.js";
-import { isDev, printLine } from "../util/helpers.js";
+import { isDev, passIntro, printLine } from "../util/helpers.js";
 import { getDataUsageMB, getPage } from "../util/context.js";
 
 // One run for all three: every model's name, image and current story, read
@@ -77,9 +77,11 @@ export async function injectSocket(page) {
 }
 
 // Waits for coomeet's connection to open and be authorized, reloading the
-// page while it doesn't (see READY_ATTEMPTS). Each failure logs why.
+// page while it doesn't (see READY_ATTEMPTS). Each attempt first gets past
+// the intro screens, in case they're showing again. Each failure logs why.
 async function waitForSocket(page) {
   for (let attempt = 1; ; attempt++) {
+    await passIntro(page);
     try {
       await page.waitForFunction(() => window.__cooscrap.socketReady(), {
         timeout: READY_TIMEOUT,
