@@ -7,7 +7,7 @@ export const login = async (email, password) => {
   const page = getPage();
   await click(
     page,
-    "#application-wrapper > div.coomeet-chat > div.chat-header > div.signed-in-user > div > div.ui-user-avatar > div",
+    "#screen-slot > div > div.gender-select__options > button.gender-option.gender-option--male > span.gender-option__icon > span.gender-option__ring",
   );
   await click(
     page,
