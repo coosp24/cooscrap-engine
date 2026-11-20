@@ -25,8 +25,10 @@ export async function click(page, selector, timeout = 3000) {
 // take a while to show, so each gets up to `timeout` — waiting on whichever
 // comes first, a screen to click or the app opening its socket, so a page
 // that's past them already (a reload once the choice is saved) isn't held up.
-const GENDER = ".gender-item.male";
-const TERMS = ".terms-actions button, .terms-actions div";
+// The new app (from Nov 2026) first, then the old one's, in case either is
+// served.
+export const GENDER = "button.gender-option--male, .gender-item.male";
+export const TERMS = "button.terms-of-service__button, .terms-actions button, .terms-actions div";
 
 export async function passIntro(page, timeout = 20000) {
   await page
@@ -40,12 +42,23 @@ export async function passIntro(page, timeout = 20000) {
       TERMS,
     )
     .catch(() => {});
-  if (await page.$(GENDER)) {
-    await page.click(GENDER);
+  if (await clickIfThere(page, GENDER)) {
     // The terms follow the gender choice.
     await page.waitForSelector(TERMS, { timeout }).catch(() => {});
   }
-  if (await page.$(TERMS)) await page.click(TERMS);
+  await clickIfThere(page, TERMS);
+}
+
+// Clicks `selector` if it's on the page, answering whether it did. A screen
+// can go away between being found and being clicked (the app closing it
+// itself), which isn't a failure: there's just nothing left to click.
+export async function clickIfThere(page, selector) {
+  const element = await page.$(selector);
+  if (!element) return false;
+  return element.click().then(
+    () => true,
+    () => false,
+  );
 }
 
 export async function type(page, selector, text) {

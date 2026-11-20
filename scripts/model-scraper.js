@@ -119,6 +119,10 @@ export default async function scrapeModels({ only = null, dryRun = false, url })
   const page = getPage();
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await waitForSocket(page);
+  const statusReg = await page.evaluate(() => window.__cooscrap.statusReg());
+  if (statusReg != null) {
+    console.log(`🪪 coomeet: ${Number(statusReg) > 0 ? "signed in" : "guest"} (statusReg ${statusReg})`);
+  }
   // A dry run inserts nothing, so it compares against the stories already
   // saved to tell which would be new.
   const savedStories = dryRun ? new Set((await getStories()).map((s) => s.story)) : null;

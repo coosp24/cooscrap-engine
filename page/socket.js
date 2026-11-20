@@ -29,6 +29,9 @@
   let authorized = false;
   // The close code of the app's socket, if coomeet has closed it.
   let closeCode = null;
+  // Who coomeet takes the session for, from its "Authorization" message:
+  // statusReg is 0 for a guest, 2 for a signed-in account.
+  let statusReg = null;
   const Base = window.WebSocket;
   window.WebSocket = new Proxy(Base, {
     construct(target, args) {
@@ -48,7 +51,10 @@
         } catch {
           return;
         }
-        if (msg?.event?.Cmd === "Authorization" && ws === socket) authorized = true;
+        if (msg?.event?.Cmd === "Authorization" && ws === socket) {
+          authorized = true;
+          statusReg = msg.data?.statusReg ?? null;
+        }
         const resolve = waiting.get(msg?.event?.Cid);
         if (resolve) resolve(msg);
       });
@@ -155,6 +161,7 @@
     socketReady: ready,
     socketOpened: () => socket !== null,
     socketStatus,
+    statusReg: () => statusReg,
     lookupModels,
   };
 })();
